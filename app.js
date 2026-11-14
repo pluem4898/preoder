@@ -1133,6 +1133,12 @@ async function handleFormSubmit() {
     return;
   }
 
+  if (!/^[0-9]{1,2}$/.test(number)) {
+    showToast('เบอร์เสื้อต้องเป็นตัวเลข 1-2 หลัก เช่น 01 หรือ 10', 'error');
+    DOM.inputScreenNumber.focus();
+    return;
+  }
+
   if (!/^[0-9]{1,3}[ก-ฮ]?$/u.test(studentNumber)) {
     showToast('กรุณากรอกเลขที่ เช่น 8, 08, 8ก หรือ 5ข', 'error');
     DOM.inputStudentNumber.focus();

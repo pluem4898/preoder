@@ -35,7 +35,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261114-4">
+  <link rel="stylesheet" href="style.css?v=20261115-1">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -269,7 +269,8 @@
                   <i class="fa-solid fa-dice"></i>
                 </button>
               </div>
-              <input type="number" id="inputScreenNumber" placeholder="10" min="0" max="99" required
+              <input type="text" id="inputScreenNumber" placeholder="10" inputmode="numeric" pattern="[0-9]{1,2}"
+                maxlength="2" required
                 class="apple-glass-input w-full px-3.5 py-2.5 text-sm font-black font-mono text-purple-900 text-center">
             </div>
 
@@ -739,7 +740,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261114-4"></script>
+  <script src="app.js?v=20261115-1"></script>
 </body>
 
 </html>

@@ -61,6 +61,10 @@ function doPost(e) {
       return createJsonResponse({ status: "error", message: "Student number must be 1-3 digits, with an optional Thai class suffix." });
     }
 
+    if (!/^[0-9]{1,2}$/.test(number)) {
+      return createJsonResponse({ status: "error", message: "Jersey number must be 1-2 digits." });
+    }
+
     if (ROOM_OPTIONS.indexOf(room) < 0) {
       return createJsonResponse({ status: "error", message: "Please select a valid classroom." });
     }
@@ -117,7 +121,9 @@ function doPost(e) {
       sheet.getRange(foundRowIndex, columns["Student No."]).setValue(studentNumber);
       sheet.getRange(foundRowIndex, columns["Room"]).setValue(room);
       sheet.getRange(foundRowIndex, columns["Screen Name"]).setValue(name);
-      sheet.getRange(foundRowIndex, columns["Screen Number"]).setValue(number);
+      var screenNumberCell = sheet.getRange(foundRowIndex, columns["Screen Number"]);
+      screenNumberCell.setNumberFormat("@");
+      screenNumberCell.setValue(number);
       sheet.getRange(foundRowIndex, columns["Size"]).setValue(size);
       
       var slipCell = sheet.getRange(foundRowIndex, columns["Payment Slip"]);
@@ -193,7 +199,9 @@ function doPost(e) {
       newRow[columns["Payment Slip"] - 1] = slipFormula || slipStatus;
       newRow[columns["Status"] - 1] = status;
       
-      sheet.appendRow(newRow);
+      var newRowIndex = sheet.getLastRow() + 1;
+      sheet.getRange(newRowIndex, columns["Screen Number"]).setNumberFormat("@");
+      sheet.getRange(newRowIndex, 1, 1, newRow.length).setValues([newRow]);
       
       // Set row height for image display
       if (slipFormula) {
@@ -414,6 +422,8 @@ function getOrCreateSheet() {
 
   // Keep leading zeroes such as 08 in the student number column.
   sheet.getRange(2, columns["Student No."], Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+  // Jersey numbers are text too, so values like 01 remain unchanged in Sheets.
+  sheet.getRange(2, columns["Screen Number"], Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
   
   // Setup Data Validation for Status column.
   var statusColumn = sheet.getRange(2, columns["Status"], Math.max(sheet.getMaxRows() - 1, 1), 1);
