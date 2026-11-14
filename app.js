@@ -409,8 +409,14 @@ function initSlipUploadEvents() {
   const updateJerseyDock = () => {
     if (dockScrollFrame) return;
     dockScrollFrame = requestAnimationFrame(() => {
-      const useNavbarDock = window.matchMedia('(min-width: 768px)').matches;
-      DOM.jerseyCardWrapper.classList.toggle('is-docked', useNavbarDock && window.scrollY > 260);
+      const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
+      const shouldDock = window.scrollY > 260;
+      const siteHeader = document.querySelector('body > header');
+      const jerseyStage = DOM.jerseyCardWrapper.closest('.jersey-stage-container');
+
+      DOM.jerseyCardWrapper.classList.toggle('is-docked', shouldDock);
+      if (siteHeader) siteHeader.classList.toggle('jersey-preview-expanded', isMobileViewport && shouldDock);
+      if (jerseyStage) jerseyStage.classList.toggle('is-preview-docked', isMobileViewport && shouldDock);
       dockScrollFrame = 0;
     });
   };
