@@ -9,6 +9,7 @@
 var SPREADSHEET_ID = "1WOI_8VSHi_6FIaifxPNuX7hTHEElSVKeR8InFHSQZLw";
 var SHEET_NAME = "Orders";
 var DRIVE_FOLDER_NAME = "Purple Jersey Slips 2026"; // โฟลเดอร์เก็บสลิป
+var ORDER_HEADERS = ["Timestamp", "Email", "Student No.", "Room", "Screen Name", "Screen Number", "Size", "Payment Slip", "Status"];
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -16,6 +17,7 @@ function doPost(e) {
 
   try {
     var sheet = getOrCreateSheet();
+    var columns = getColumnMap(sheet);
     var rawData = e.postData ? e.postData.contents : "{}";
     var data = {};
     
@@ -26,6 +28,8 @@ function doPost(e) {
     }
 
     var email = (data.email || "").toString().trim().toLowerCase();
+    var studentNumber = (data.studentNumber || "").toString().trim();
+    var room = (data.room || "").toString().trim();
     var name = (data.name || "").toString().trim().toUpperCase();
     var number = (data.number || "").toString().trim();
     var size = (data.size || "L").toString().trim().toUpperCase();
@@ -34,18 +38,22 @@ function doPost(e) {
     var status = data.status || (data.slipImage || data.slipUrl ? "รอตรวจสอบสลิป" : "รอชำระเงิน");
     var timestamp = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
 
-    if (!email) {
+    if (!email || !studentNumber || !room) {
       return createJsonResponse({
         status: "error",
-        message: "Missing required field: email"
+        message: "Required fields: email, studentNumber, and room"
       });
+    }
+
+    if (!/^\d{1,3}$/.test(studentNumber)) {
+      return createJsonResponse({ status: "error", message: "Student number must be 1-3 digits" });
     }
 
     var values = sheet.getDataRange().getValues();
     var foundRowIndex = -1;
 
     for (var i = 1; i < values.length; i++) {
-      var rowEmail = (values[i][1] || "").toString().trim().toLowerCase();
+      var rowEmail = (values[i][columns["Email"] - 1] || "").toString().trim().toLowerCase();
       if (rowEmail === email) {
         foundRowIndex = i + 1;
         break;
@@ -54,12 +62,14 @@ function doPost(e) {
 
     if (foundRowIndex > 0) {
       // UPDATE existing row
-      sheet.getRange(foundRowIndex, 1).setValue(timestamp);
-      sheet.getRange(foundRowIndex, 3).setValue(name);
-      sheet.getRange(foundRowIndex, 4).setValue(number);
-      sheet.getRange(foundRowIndex, 5).setValue(size);
+      sheet.getRange(foundRowIndex, columns["Timestamp"]).setValue(timestamp);
+      sheet.getRange(foundRowIndex, columns["Student No."]).setValue(studentNumber);
+      sheet.getRange(foundRowIndex, columns["Room"]).setValue(room);
+      sheet.getRange(foundRowIndex, columns["Screen Name"]).setValue(name);
+      sheet.getRange(foundRowIndex, columns["Screen Number"]).setValue(number);
+      sheet.getRange(foundRowIndex, columns["Size"]).setValue(size);
       
-      var slipCell = sheet.getRange(foundRowIndex, 6);
+      var slipCell = sheet.getRange(foundRowIndex, columns["Payment Slip"]);
       var currentSlipValue = slipCell.getValue();
       var currentSlipFormula = slipCell.getFormula();
       
@@ -84,7 +94,7 @@ function doPost(e) {
       }
       // กรณีอื่นๆ = เก็บค่าเดิมไว้ (ไม่ทำอะไร)
       
-      sheet.getRange(foundRowIndex, 7).setValue(status);
+      sheet.getRange(foundRowIndex, columns["Status"]).setValue(status);
 
       return createJsonResponse({
         status: "success",
@@ -94,6 +104,8 @@ function doPost(e) {
         data: {
           timestamp: timestamp,
           email: email,
+          studentNumber: studentNumber,
+          room: room,
           name: name,
           number: number,
           size: size,
@@ -120,15 +132,16 @@ function doPost(e) {
         slipStatus = "✅ มีสลิปแนบแล้ว";
       }
       
-      var newRow = [
-        timestamp,
-        email,
-        name,
-        number,
-        size,
-        slipFormula || slipStatus,
-        status
-      ];
+      var newRow = new Array(sheet.getLastColumn()).fill("");
+      newRow[columns["Timestamp"] - 1] = timestamp;
+      newRow[columns["Email"] - 1] = email;
+      newRow[columns["Student No."] - 1] = studentNumber;
+      newRow[columns["Room"] - 1] = room;
+      newRow[columns["Screen Name"] - 1] = name;
+      newRow[columns["Screen Number"] - 1] = number;
+      newRow[columns["Size"] - 1] = size;
+      newRow[columns["Payment Slip"] - 1] = slipFormula || slipStatus;
+      newRow[columns["Status"] - 1] = status;
       
       sheet.appendRow(newRow);
       
@@ -145,6 +158,8 @@ function doPost(e) {
         data: {
           timestamp: timestamp,
           email: email,
+          studentNumber: studentNumber,
+          room: room,
           name: name,
           number: number,
           size: size,
@@ -202,14 +217,15 @@ function doGet(e) {
     }
 
     var sheet = getOrCreateSheet();
+    var columns = getColumnMap(sheet);
     var values = sheet.getDataRange().getValues();
 
     if (action === "search" && email) {
       for (var i = 1; i < values.length; i++) {
-        var rowEmail = (values[i][1] || "").toString().trim().toLowerCase();
+        var rowEmail = (values[i][columns["Email"] - 1] || "").toString().trim().toLowerCase();
         if (rowEmail === email) {
           // Extract slipUrl from IMAGE formula if exists
-          var slipCellValue = values[i][5] || "";
+          var slipCellValue = values[i][columns["Payment Slip"] - 1] || "";
           var slipUrl = "";
           
           if (slipCellValue.toString().indexOf('=IMAGE("') === 0) {
@@ -224,14 +240,16 @@ function doGet(e) {
             status: "success",
             found: true,
             data: {
-              timestamp: values[i][0],
-              email: values[i][1],
-              name: values[i][2],
-              number: (values[i][3] || "").toString(),
-              size: values[i][4] || "L",
+              timestamp: values[i][columns["Timestamp"] - 1],
+              email: values[i][columns["Email"] - 1],
+              studentNumber: (values[i][columns["Student No."] - 1] || "").toString(),
+              room: (values[i][columns["Room"] - 1] || "").toString(),
+              name: values[i][columns["Screen Name"] - 1],
+              number: (values[i][columns["Screen Number"] - 1] || "").toString(),
+              size: values[i][columns["Size"] - 1] || "L",
               hasSlip: slipUrl ? "มีสลิป" : (slipCellValue.toString().indexOf('✅') >= 0 ? "มีสลิป" : "ยังไม่แนบสลิป"),
               slipUrl: slipUrl,
-              status: values[i][6] || ""
+              status: values[i][columns["Status"] - 1] || ""
             }
           });
         }
@@ -247,15 +265,17 @@ function doGet(e) {
     if (action === "list") {
       var orders = [];
       for (var j = 1; j < values.length; j++) {
-        if (values[j][1]) {
+        if (values[j][columns["Email"] - 1]) {
           orders.push({
-            timestamp: values[j][0],
-            email: values[j][1],
-            name: values[j][2],
-            number: values[j][3],
-            size: values[j][4] || "L",
-            hasSlip: values[j][5] || "",
-            status: values[j][6] || ""
+            timestamp: values[j][columns["Timestamp"] - 1],
+            email: values[j][columns["Email"] - 1],
+            studentNumber: (values[j][columns["Student No."] - 1] || "").toString(),
+            room: (values[j][columns["Room"] - 1] || "").toString(),
+            name: values[j][columns["Screen Name"] - 1],
+            number: values[j][columns["Screen Number"] - 1],
+            size: values[j][columns["Size"] - 1] || "L",
+            hasSlip: values[j][columns["Payment Slip"] - 1] || "",
+            status: values[j][columns["Status"] - 1] || ""
           });
         }
       }
@@ -295,26 +315,50 @@ function getOrCreateSheet() {
   var sheet = doc.getSheetByName(SHEET_NAME) || doc.getActiveSheet();
   
   if (sheet.getLastRow() === 0) {
-    var headers = ["Timestamp", "Email", "Screen Name", "Screen Number", "Size", "Payment Slip", "Status"];
-    sheet.appendRow(headers);
-    
-    var headerRange = sheet.getRange(1, 1, 1, headers.length);
-    headerRange.setFontWeight("bold");
-    headerRange.setBackground("#4c1d95");
-    headerRange.setFontColor("#ffffff");
-    headerRange.setHorizontalAlignment("center");
-    
-    sheet.setColumnWidth(1, 170); // Timestamp
-    sheet.setColumnWidth(2, 220); // Email
-    sheet.setColumnWidth(3, 160); // Name
-    sheet.setColumnWidth(4, 120); // Number
-    sheet.setColumnWidth(5, 80);  // Size
-    sheet.setColumnWidth(6, 150); // Slip Status
-    sheet.setColumnWidth(7, 140); // Status
+    sheet.getRange(1, 1, 1, ORDER_HEADERS.length).setValues([ORDER_HEADERS]);
+  } else {
+    var existingHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+    var emailIndex = existingHeaders.indexOf("Email");
+    var nameIndex = existingHeaders.indexOf("Screen Name");
+    var hasStudentNumber = existingHeaders.indexOf("Student No.") >= 0;
+    var hasRoom = existingHeaders.indexOf("Room") >= 0;
+
+    // Preserve legacy rows by adding the new fields between Email and Screen Name.
+    if (!hasStudentNumber && !hasRoom && emailIndex >= 0 && nameIndex === emailIndex + 1) {
+      var insertAt = nameIndex + 1;
+      sheet.insertColumnsBefore(insertAt, 2);
+      sheet.getRange(1, insertAt, 1, 2).setValues([["Student No.", "Room"]]);
+    } else {
+      if (!hasStudentNumber) {
+        var studentColumn = sheet.getLastColumn() + 1;
+        sheet.getRange(1, studentColumn).setValue("Student No.");
+      }
+      if (!hasRoom) {
+        var roomColumn = sheet.getLastColumn() + 1;
+        sheet.getRange(1, roomColumn).setValue("Room");
+      }
+    }
   }
+
+  var columns = getColumnMap(sheet);
+  var headerRange = sheet.getRange(1, 1, 1, sheet.getLastColumn());
+  headerRange.setFontWeight("bold");
+  headerRange.setBackground("#4c1d95");
+  headerRange.setFontColor("#ffffff");
+  headerRange.setHorizontalAlignment("center");
+
+  sheet.setColumnWidth(columns["Timestamp"], 170);
+  sheet.setColumnWidth(columns["Email"], 220);
+  sheet.setColumnWidth(columns["Student No."], 100);
+  sheet.setColumnWidth(columns["Room"], 100);
+  sheet.setColumnWidth(columns["Screen Name"], 160);
+  sheet.setColumnWidth(columns["Screen Number"], 120);
+  sheet.setColumnWidth(columns["Size"], 80);
+  sheet.setColumnWidth(columns["Payment Slip"], 150);
+  sheet.setColumnWidth(columns["Status"], 140);
   
-  // Setup Data Validation for Status column (column 7)
-  var statusColumn = sheet.getRange(2, 7, sheet.getMaxRows() - 1, 1);
+  // Setup Data Validation for Status column.
+  var statusColumn = sheet.getRange(2, columns["Status"], Math.max(sheet.getMaxRows() - 1, 1), 1);
   var statusOptions = [
     "รอชำระเงิน",
     "รอตรวจสอบสลิป", 
@@ -333,6 +377,15 @@ function getOrCreateSheet() {
   statusColumn.setDataValidation(rule);
   
   return sheet;
+}
+
+function getColumnMap(sheet) {
+  var headerValues = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  var columns = {};
+  headerValues.forEach(function(header, index) {
+    if (header) columns[header.toString().trim()] = index + 1;
+  });
+  return columns;
 }
 
 function createJsonResponse(data) {

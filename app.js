@@ -2,24 +2,17 @@
 // ⚙️ แผงตั้งค่าพิกัด & ขนาดสกรีนเสื้อ (สามารถปรับค่าที่นี่ได้โดยตรง)
 // ========================================================
 const JERSEY_CONFIG = {
-  // 1. เบอร์ด้านหลัง (Back Number)
+  // Back number calibrated for the Authong star jersey artwork.
   backNumber: {
-    x: 390,        // แนวนอน (390 = กึ่งกลางเสื้อพอดี)
-    y: 445,        // แนวตั้ง (ความสูงของเบอร์หลัง)
-    size: 415      // ขนาดตัวเลขด้านหลัง
+    x: 662,
+    y: 470,
+    size: 220
   },
 
-  // 2. ชื่อด้านหลัง (Back Name)
+  // Back name sits below the small shoulder monogram.
   backName: {
-    arcCurveY: 195, // ระดับความโค้งของชื่อแนวตั้ง (Y)
-    baseSize: 76   // ขนาดตัวอักษรชื่อเริ่มต้น
-  },
-
-  // 3. เบอร์ด้านหน้าอก (Front Chest Number)
-  frontNumber: {
-    x: 250,        // แนวนอน (250 = อกขวา)
-    y: 250,        // แนวตั้ง (ความสูงของเบอร์หน้าอก)
-    size: 100      // ขนาดตัวเลขด้านหน้า
+    arcCurveY: 300,
+    baseSize: 66
   }
 };
 
@@ -30,6 +23,8 @@ const AppState = {
   mode: 'new', // 'new' | 'edit'
   viewSide: 'back', // 'back' | 'front' | 'both'
   email: '',
+  studentNumber: '',
+  room: '',
   size: 'L',
   screenName: '',
   screenNumber: '10',
@@ -65,6 +60,8 @@ const DOM = {
   submitButtonSection: document.getElementById('submitButtonSection'),
   inputScreenName: document.getElementById('inputScreenName'),
   inputScreenNumber: document.getElementById('inputScreenNumber'),
+  inputStudentNumber: document.getElementById('inputStudentNumber'),
+  inputRoom: document.getElementById('inputRoom'),
   btnSubmit: document.getElementById('btnSubmit'),
   btnSubmitText: document.getElementById('btnSubmitText'),
   btnSubmitIcon: document.getElementById('btnSubmitIcon'),
@@ -118,11 +115,9 @@ const DOM = {
   nameArcPath: document.getElementById('nameArcPath'),
   svgCurvedNameText: document.getElementById('svgCurvedNameText'),
   svgBackNumber: document.getElementById('svgBackNumber'),
-  svgFrontNumber: document.getElementById('svgFrontNumber'),
   nameArcPathBoth: document.getElementById('nameArcPathBoth'),
   svgCurvedNameBoth: document.getElementById('svgCurvedNameBoth'),
   svgBothNumber: document.getElementById('svgBothNumber'),
-  svgBothFrontNumber: document.getElementById('svgBothFrontNumber'),
 
   // View Switchers
   btnViewBack: document.getElementById('btnViewBack'),
@@ -210,6 +205,16 @@ function bindEvents() {
     AppState.screenNumber = val;
     e.target.value = val;
     updateLivePreview();
+  });
+
+  DOM.inputStudentNumber.addEventListener('input', (e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+    AppState.studentNumber = val;
+    e.target.value = val;
+  });
+
+  DOM.inputRoom.addEventListener('input', (e) => {
+    AppState.room = e.target.value.trimStart();
   });
 
   // Quick Tools
@@ -711,18 +716,17 @@ function updateLivePreview() {
   const displayName = name || 'YOUR NAME';
   const displayNumber = number || '10';
 
-  const { backNumber, backName, frontNumber } = JERSEY_CONFIG;
+  const { backNumber, backName } = JERSEY_CONFIG;
 
   // 1. Dynamic Curved Name Typography (Fewer characters = larger bold text)
   const { dynamicSize, letterSpacing } = calculateDynamicNameTypography(name, backName.baseSize);
 
-  // Standard collar ends around Y = 270 at X=140 and X=640
-  const arcYEnd = 270;
+  const arcYEnd = 390;
   if (DOM.nameArcPath) {
-    DOM.nameArcPath.setAttribute('d', `M 140 ${arcYEnd} Q 390 ${backName.arcCurveY} 640 ${arcYEnd}`);
+    DOM.nameArcPath.setAttribute('d', `M 425 ${arcYEnd} Q 662 ${backName.arcCurveY} 899 ${arcYEnd}`);
   }
   if (DOM.nameArcPathBoth) {
-    DOM.nameArcPathBoth.setAttribute('d', `M 910 ${arcYEnd} Q 1155 ${backName.arcCurveY} 1400 ${arcYEnd}`);
+    DOM.nameArcPathBoth.setAttribute('d', `M 425 ${arcYEnd} Q 662 ${backName.arcCurveY} 899 ${arcYEnd}`);
   }
 
   // Name Text Content & Dynamic Font Size / Letter Spacing
@@ -748,7 +752,7 @@ function updateLivePreview() {
     }
   }
 
-  // 2. Number Position & Size (Inter Miami Font - Clean, No Shadows)
+  // Back number placement on the new jersey artwork.
   if (DOM.svgBackNumber) {
     DOM.svgBackNumber.style.fontFamily = "'JerseyMiami', sans-serif";
     DOM.svgBackNumber.setAttribute('font-size', backNumber.size.toString());
@@ -757,30 +761,13 @@ function updateLivePreview() {
     DOM.svgBackNumber.textContent = displayNumber;
   }
 
-  // Front View Chest Number (Calibrated athletic chest size)
-  if (DOM.svgFrontNumber) {
-    DOM.svgFrontNumber.style.fontFamily = "'JerseyMiami', sans-serif";
-    DOM.svgFrontNumber.setAttribute('font-size', frontNumber.size.toString());
-    DOM.svgFrontNumber.setAttribute('x', frontNumber.x.toString());
-    DOM.svgFrontNumber.setAttribute('y', frontNumber.y.toString());
-    DOM.svgFrontNumber.textContent = displayNumber;
-  }
-
-  // Both Sides View: Back Number & Front Chest Number
+  // Both-sides view keeps the back on the left and the supplied front art on the right.
   if (DOM.svgBothNumber) {
     DOM.svgBothNumber.style.fontFamily = "'JerseyMiami', sans-serif";
     DOM.svgBothNumber.setAttribute('font-size', backNumber.size.toString());
-    DOM.svgBothNumber.setAttribute('x', '1155');
+    DOM.svgBothNumber.setAttribute('x', backNumber.x.toString());
     DOM.svgBothNumber.setAttribute('y', backNumber.y.toString());
     DOM.svgBothNumber.textContent = displayNumber;
-  }
-
-  if (DOM.svgBothFrontNumber) {
-    DOM.svgBothFrontNumber.style.fontFamily = "'JerseyMiami', sans-serif";
-    DOM.svgBothFrontNumber.setAttribute('font-size', frontNumber.size.toString());
-    DOM.svgBothFrontNumber.setAttribute('x', frontNumber.x.toString());
-    DOM.svgBothFrontNumber.setAttribute('y', frontNumber.y.toString());
-    DOM.svgBothFrontNumber.textContent = displayNumber;
   }
 
   applyNumberStyle();
@@ -789,9 +776,7 @@ function updateLivePreview() {
 function applyNumberStyle() {
   const cls = 'number-style-clean';
   if (DOM.svgBackNumber) DOM.svgBackNumber.setAttribute('class', cls);
-  if (DOM.svgFrontNumber) DOM.svgFrontNumber.setAttribute('class', cls);
   if (DOM.svgBothNumber) DOM.svgBothNumber.setAttribute('class', cls);
-  if (DOM.svgBothFrontNumber) DOM.svgBothFrontNumber.setAttribute('class', cls);
 }
 
 // View switcher removed - always show back view
@@ -829,7 +814,7 @@ function setJerseyView(side) {
       DOM.jerseyViewFrontEl.classList.add('hidden');
       DOM.jerseyViewBothEl.classList.add('hidden');
       DOM.jerseyCardWrapper.style.maxWidth = '440px';
-      DOM.jerseyCardWrapper.style.aspectRatio = '780 / 1019';
+      DOM.jerseyCardWrapper.style.aspectRatio = '1324 / 1180';
       
       requestAnimationFrame(() => {
         DOM.jerseyViewBackEl.style.opacity = '1';
@@ -842,7 +827,7 @@ function setJerseyView(side) {
       DOM.jerseyViewFrontEl.classList.remove('hidden');
       DOM.jerseyViewBothEl.classList.add('hidden');
       DOM.jerseyCardWrapper.style.maxWidth = '440px';
-      DOM.jerseyCardWrapper.style.aspectRatio = '780 / 1019';
+      DOM.jerseyCardWrapper.style.aspectRatio = '1324 / 1180';
       
       requestAnimationFrame(() => {
         DOM.jerseyViewFrontEl.style.opacity = '1';
@@ -855,7 +840,7 @@ function setJerseyView(side) {
       DOM.jerseyViewFrontEl.classList.add('hidden');
       DOM.jerseyViewBothEl.classList.remove('hidden');
       DOM.jerseyCardWrapper.style.maxWidth = '680px';
-      DOM.jerseyCardWrapper.style.aspectRatio = '1543 / 1019';
+      DOM.jerseyCardWrapper.style.aspectRatio = '2.283 / 1';
       
       requestAnimationFrame(() => {
         DOM.jerseyViewBothEl.style.opacity = '1';
@@ -916,6 +901,8 @@ async function lookupEmailAndShowForm(email) {
         // Found existing record - load it
         const gasRecord = {
           email: result.data.email || email,
+          studentNumber: (result.data.studentNumber || '').toString(),
+          room: result.data.room || '',
           name: result.data.name || '',
           number: (result.data.number || '10').toString(),
           size: result.data.size || 'L',
@@ -979,11 +966,15 @@ function switchToEditMode(record) {
 
   AppState.screenName = record.name || '';
   AppState.screenNumber = record.number || '10';
+  AppState.studentNumber = (record.studentNumber || '').toString();
+  AppState.room = record.room || '';
   AppState.size = record.size || 'L';
   AppState.orderStatus = record.status || 'รอชำระเงิน';
 
   DOM.inputScreenName.value = record.name || '';
   DOM.inputScreenNumber.value = record.number || '10';
+  DOM.inputStudentNumber.value = AppState.studentNumber;
+  DOM.inputRoom.value = AppState.room;
 
   DOM.sizeBtns.forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-size') === AppState.size);
@@ -1066,10 +1057,14 @@ function resetToNewMode() {
   // Clear form fields
   AppState.screenName = '';
   AppState.screenNumber = '10';
+  AppState.studentNumber = '';
+  AppState.room = '';
   AppState.size = 'L';
   
   DOM.inputScreenName.value = '';
   DOM.inputScreenNumber.value = '10';
+  DOM.inputStudentNumber.value = '';
+  DOM.inputRoom.value = '';
   
   // Reset size buttons
   DOM.sizeBtns.forEach(btn => {
@@ -1096,6 +1091,8 @@ function resetToNewMode() {
 function resetForm() {
   AppState.screenName = '';
   AppState.screenNumber = '10';
+  AppState.studentNumber = '';
+  AppState.room = '';
   AppState.size = 'L';
   AppState.email = '';
   AppState.slipImage = null;
@@ -1105,6 +1102,8 @@ function resetForm() {
   DOM.inputEmail.value = '';
   DOM.inputScreenName.value = '';
   DOM.inputScreenNumber.value = '10';
+  DOM.inputStudentNumber.value = '';
+  DOM.inputRoom.value = '';
   DOM.emailStatusBadge.classList.add('hidden');
 
   DOM.sizeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-size') === 'L'));
@@ -1145,6 +1144,8 @@ async function fetchDriveImageViaGAS(fileId) {
 // ==========================================
 async function handleFormSubmit() {
   const email = DOM.inputEmail.value.trim();
+  const studentNumber = DOM.inputStudentNumber.value.trim();
+  const room = DOM.inputRoom.value.trim();
   const name = DOM.inputScreenName.value.trim();
   const number = DOM.inputScreenNumber.value.trim();
 
@@ -1166,6 +1167,21 @@ async function handleFormSubmit() {
     return;
   }
 
+  if (!/^\d{1,3}$/.test(studentNumber)) {
+    showToast('กรุณากรอกเลขที่เป็นตัวเลข 1-3 หลัก', 'error');
+    DOM.inputStudentNumber.focus();
+    return;
+  }
+
+  if (!room) {
+    showToast('กรุณากรอกห้องเรียน', 'error');
+    DOM.inputRoom.focus();
+    return;
+  }
+
+  AppState.studentNumber = studentNumber;
+  AppState.room = room;
+
   AppState.isSubmitting = true;
   DOM.btnSubmit.disabled = true;
   DOM.btnSubmitText.textContent = 'กำลังบันทึกข้อมูล...';
@@ -1184,6 +1200,8 @@ async function handleFormSubmit() {
   
   const orderData = {
     email: email,
+    studentNumber: studentNumber,
+    room: room,
     productTitle: 'เสื้อแข่งขันทีมสีม่วง 2026',
     name: name.toUpperCase(),
     number: number,
@@ -1274,6 +1292,7 @@ function renderOrdersList() {
             <span class="px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 font-mono font-bold text-xs">#${o.number}</span>
             <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-xs">Size ${o.size}</span>
           </div>
+          <p class="text-[11px] text-slate-600">เลขที่ ${o.studentNumber || '-'} · ห้อง ${o.room || '-'}</p>
           <p class="text-[11px] text-slate-500 font-mono">${o.email} &bull; ฿${o.price}</p>
         </div>
       </div>
@@ -1321,9 +1340,9 @@ function exportOrdersToCSV() {
     return;
   }
 
-  let csv = 'Timestamp,Email,Name,Number,Size,Style,Price,Status,HasSlip\n';
+  let csv = 'Timestamp,Email,StudentNumber,Room,Name,Number,Size,Style,Price,Status,HasSlip\n';
   AppState.orders.forEach(o => {
-    csv += `"${o.timestamp}","${o.email}","${o.name}","${o.number}","${o.size}","${o.style}","${o.price}","${o.status || 'Confirmed'}","${o.slipImage ? 'YES' : 'NO'}"\n`;
+    csv += `"${o.timestamp}","${o.email}","${o.studentNumber || ''}","${o.room || ''}","${o.name}","${o.number}","${o.size}","${o.style}","${o.price}","${o.status || 'Confirmed'}","${o.slipImage ? 'YES' : 'NO'}"\n`;
   });
 
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
