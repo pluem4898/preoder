@@ -166,6 +166,19 @@ document.addEventListener('DOMContentLoaded', () => {
 // 4. EVENT BINDINGS
 // ==========================================
 function bindEvents() {
+  const openSizeGuide = () => {
+    if (!DOM.modalSizeGuide) return;
+    DOM.modalSizeGuide.classList.remove('hidden');
+    document.documentElement.classList.add('size-guide-open');
+    document.body.classList.add('size-guide-open');
+  };
+  const closeSizeGuide = () => {
+    if (!DOM.modalSizeGuide) return;
+    DOM.modalSizeGuide.classList.add('hidden');
+    document.documentElement.classList.remove('size-guide-open');
+    document.body.classList.remove('size-guide-open');
+  };
+
   // Student number + room identify and load an existing order.
   DOM.btnLookupStudent.addEventListener('click', () => {
     const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
@@ -201,11 +214,29 @@ function bindEvents() {
     updateLivePreview();
   });
 
+  let isStudentNumberComposing = false;
+  DOM.inputStudentNumber.addEventListener('compositionstart', () => {
+    isStudentNumberComposing = true;
+  });
+  DOM.inputStudentNumber.addEventListener('compositionend', () => {
+    isStudentNumberComposing = false;
+    const raw = DOM.inputStudentNumber.value.replace(/\s+/g, '');
+    const val = (raw.match(/^[0-9]{0,3}[ก-ฮ]?/u) || [''])[0];
+    AppState.studentNumber = val;
+    DOM.inputStudentNumber.value = val;
+  });
   DOM.inputStudentNumber.addEventListener('input', (e) => {
+    if (isStudentNumberComposing || e.isComposing) return;
     const raw = e.target.value.replace(/\s+/g, '');
     const val = (raw.match(/^[0-9]{0,3}[ก-ฮ]?/u) || [''])[0];
     AppState.studentNumber = val;
-    e.target.value = val;
+    if (e.target.value !== val) e.target.value = val;
+  });
+  DOM.inputStudentNumber.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.isComposing && !isStudentNumberComposing) {
+      event.preventDefault();
+      DOM.inputStudentNumber.blur();
+    }
   });
 
   DOM.inputRoom.addEventListener('change', (e) => {
@@ -262,20 +293,30 @@ function bindEvents() {
       DOM.sizeBtns.forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-size') === sizeVal);
       });
-      if (DOM.modalSizeGuide) DOM.modalSizeGuide.classList.add('hidden');
+      closeSizeGuide();
       showToast(`เลือกไซส์ ${sizeVal} เรียบร้อยแล้ว`, 'success');
     });
   });
 
   // Size Guide Modal Open/Close
   if (DOM.btnOpenSizeGuideNav) {
-    DOM.btnOpenSizeGuideNav.addEventListener('click', () => DOM.modalSizeGuide.classList.remove('hidden'));
+    DOM.btnOpenSizeGuideNav.addEventListener('click', openSizeGuide);
   }
   if (DOM.btnOpenSizeGuideLink) {
-    DOM.btnOpenSizeGuideLink.addEventListener('click', () => DOM.modalSizeGuide.classList.remove('hidden'));
+    DOM.btnOpenSizeGuideLink.addEventListener('click', openSizeGuide);
   }
-  if (DOM.btnCloseSizeGuide) {
-    DOM.btnCloseSizeGuide.addEventListener('click', () => DOM.modalSizeGuide.classList.add('hidden'));
+  if (DOM.modalSizeGuide) {
+    DOM.modalSizeGuide.addEventListener('click', (event) => {
+      const clickedCloseButton = event.target.closest && event.target.closest('#btnCloseSizeGuide');
+      if (event.target === DOM.modalSizeGuide || clickedCloseButton) {
+        closeSizeGuide();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !DOM.modalSizeGuide.classList.contains('hidden')) {
+        closeSizeGuide();
+      }
+    });
   }
 
   // View Switchers
@@ -407,6 +448,8 @@ function initSlipUploadEvents() {
 
   let dockScrollFrame = 0;
   let lastDockMode = null;
+  let isMobileFormEditing = false;
+  let formFocusReleaseTimer = 0;
   const viewControls = document.getElementById('jerseyViewControls');
   const viewControlRow = document.getElementById('jerseyViewControlRow');
   const originalControlsParent = viewControls ? viewControls.parentElement : null;
@@ -432,8 +475,8 @@ function initSlipUploadEvents() {
       },
       { transform: 'translate(0, 0) scale(1, 1)', transformOrigin: 'top left' }
     ], {
-      duration: 380,
-      easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+      duration: 460,
+      easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
     });
     animation.onfinish = () => DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
     animation.oncancel = () => DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
@@ -443,7 +486,8 @@ function initSlipUploadEvents() {
     if (dockScrollFrame) return;
     dockScrollFrame = requestAnimationFrame(() => {
       const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
-      const shouldDock = window.scrollY > 260;
+      const wasDocked = lastDockMode !== null && lastDockMode !== 'normal';
+      const shouldDock = window.scrollY > (wasDocked ? 220 : 260);
       const dockMode = shouldDock ? (isMobileViewport ? 'mobile' : 'desktop') : 'normal';
       const previousMode = lastDockMode;
       const shouldAnimate = previousMode !== null && previousMode !== dockMode &&
@@ -454,7 +498,10 @@ function initSlipUploadEvents() {
 
       if (shouldAnimate) DOM.jerseyCardWrapper.classList.add('is-docking-animated');
       DOM.jerseyCardWrapper.classList.toggle('is-docked', shouldDock);
-      if (navCard) navCard.classList.toggle('jersey-preview-expanded', dockMode === 'mobile');
+      if (navCard) {
+        navCard.classList.toggle('jersey-preview-expanded', dockMode === 'mobile' && !isMobileFormEditing);
+        navCard.classList.toggle('is-form-editing', isMobileViewport && isMobileFormEditing);
+      }
       if (jerseyStage) jerseyStage.classList.toggle('is-preview-docked', isMobileViewport && shouldDock);
 
       if (dockMode !== 'normal') {
@@ -478,12 +525,28 @@ function initSlipUploadEvents() {
       }
 
       lastDockMode = dockMode;
-      if (shouldAnimate) requestAnimationFrame(() => animateJerseyPosition(fromRect));
+      if (shouldAnimate) animateJerseyPosition(fromRect);
       dockScrollFrame = 0;
     });
   };
   window.addEventListener('scroll', updateJerseyDock, { passive: true });
   window.addEventListener('resize', updateJerseyDock, { passive: true });
+  const isEditableField = (element) => Boolean(element && element.matches &&
+    element.matches('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select, [contenteditable="true"]'));
+  document.addEventListener('focusin', (event) => {
+    if (!isEditableField(event.target)) return;
+    window.clearTimeout(formFocusReleaseTimer);
+    isMobileFormEditing = true;
+    updateJerseyDock();
+  });
+  document.addEventListener('focusout', (event) => {
+    if (!isEditableField(event.target)) return;
+    window.clearTimeout(formFocusReleaseTimer);
+    formFocusReleaseTimer = window.setTimeout(() => {
+      isMobileFormEditing = isEditableField(document.activeElement);
+      updateJerseyDock();
+    }, 450);
+  });
   updateJerseyDock();
 }
 
