@@ -6,7 +6,8 @@ const JERSEY_CONFIG = {
   backNumber: {
     x: 662,
     y: 520,
-    size: 220
+    size: 240,
+    digitWidth: 164
   },
 
   // Back name is a straight line below the small shoulder monogram.
@@ -966,6 +967,7 @@ function updateLivePreview() {
   const displayNumber = number || (isEditing ? '' : '10');
 
   const { backNumber, backName } = JERSEY_CONFIG;
+  const numberWidth = String(displayNumber.length * backNumber.digitWidth);
 
   // 1. Keep the name horizontal and scale it to fit the jersey.
   const { dynamicSize, letterSpacing } = calculateDynamicNameTypography(name, backName.baseSize);
@@ -991,7 +993,7 @@ function updateLivePreview() {
     DOM.svgBackNumber.setAttribute('font-size', backNumber.size.toString());
     DOM.svgBackNumber.setAttribute('x', backNumber.x.toString());
     DOM.svgBackNumber.setAttribute('y', backNumber.y.toString());
-    DOM.svgBackNumber.setAttribute('textLength', (displayNumber.length * 150).toString());
+    DOM.svgBackNumber.setAttribute('textLength', numberWidth);
     DOM.svgBackNumber.textContent = displayNumber;
   }
 
@@ -1001,7 +1003,7 @@ function updateLivePreview() {
     DOM.svgBothNumber.setAttribute('font-size', backNumber.size.toString());
     DOM.svgBothNumber.setAttribute('x', backNumber.x.toString());
     DOM.svgBothNumber.setAttribute('y', backNumber.y.toString());
-    DOM.svgBothNumber.setAttribute('textLength', (displayNumber.length * 150).toString());
+    DOM.svgBothNumber.setAttribute('textLength', numberWidth);
     DOM.svgBothNumber.textContent = displayNumber;
   }
 
