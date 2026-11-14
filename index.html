@@ -36,7 +36,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261115-5">
+  <link rel="stylesheet" href="style.css?v=20261115-6">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -49,7 +49,7 @@
 
   <!-- ================= FLOATING APPLE GLASS HEADER ================= -->
   <header class="sticky top-4 z-40 px-4 sm:px-6 max-w-5xl mx-auto w-full">
-    <div class="apple-glass-nav px-5 py-3 flex items-center justify-between">
+    <div class="apple-glass-nav relative px-5 py-3 flex items-center justify-between">
 
       <!-- Brand Minimal Logo -->
       <a href="#" class="flex items-center space-x-2.5 group">
@@ -92,8 +92,8 @@
       <div class="lg:col-span-6 flex flex-col items-center justify-center space-y-4">
 
         <!-- View mode controls -->
-        <div class="w-full flex items-center justify-between px-2 mb-2">
-          <div class="apple-segmented-control">
+        <div id="jerseyViewControlRow" class="w-full flex items-center justify-between px-2 mb-2">
+          <div id="jerseyViewControls" class="apple-segmented-control">
             <button type="button" id="btnViewBack" class="apple-segmented-btn active">ด้านหลัง</button>
             <button type="button" id="btnViewFront" class="apple-segmented-btn">ด้านหน้า</button>
             <button type="button" id="btnViewBoth" class="apple-segmented-btn hidden sm:inline-block">คู่หน้า-หลัง</button>
@@ -733,7 +733,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261115-4"></script>
+  <script src="app.js?v=20261115-5"></script>
 </body>
 
 </html>

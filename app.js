@@ -406,17 +406,71 @@ function initSlipUploadEvents() {
   }
 
   let dockScrollFrame = 0;
+  let lastDockMode = null;
+  const viewControls = document.getElementById('jerseyViewControls');
+  const viewControlRow = document.getElementById('jerseyViewControlRow');
+  const originalControlsParent = viewControls ? viewControls.parentElement : null;
+
+  const animateJerseyPosition = (fromRect) => {
+    const toRect = DOM.jerseyCardWrapper.getBoundingClientRect();
+    if (!fromRect.width || !fromRect.height || !toRect.width || !toRect.height ||
+        typeof DOM.jerseyCardWrapper.animate !== 'function') {
+      DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
+      return;
+    }
+
+    const translateX = fromRect.left - toRect.left;
+    const translateY = fromRect.top - toRect.top;
+    const scaleX = fromRect.width / toRect.width;
+    const scaleY = fromRect.height / toRect.height;
+    const animation = DOM.jerseyCardWrapper.animate([
+      {
+        transform: `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`,
+        transformOrigin: 'top left'
+      },
+      { transform: 'translate(0, 0) scale(1, 1)', transformOrigin: 'top left' }
+    ], {
+      duration: 380,
+      easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+    });
+    animation.onfinish = () => DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
+    animation.oncancel = () => DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
+  };
+
   const updateJerseyDock = () => {
     if (dockScrollFrame) return;
     dockScrollFrame = requestAnimationFrame(() => {
       const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
       const shouldDock = window.scrollY > 260;
-      const siteHeader = document.querySelector('body > header');
+      const dockMode = shouldDock ? (isMobileViewport ? 'mobile' : 'desktop') : 'normal';
+      const previousMode = lastDockMode;
+      const shouldAnimate = previousMode !== null && previousMode !== dockMode &&
+        (previousMode === 'mobile' || dockMode === 'mobile');
+      const fromRect = shouldAnimate ? DOM.jerseyCardWrapper.getBoundingClientRect() : null;
+      const navCard = document.querySelector('.apple-glass-nav');
       const jerseyStage = DOM.jerseyCardWrapper.closest('.jersey-stage-container');
 
+      if (shouldAnimate) DOM.jerseyCardWrapper.classList.add('is-docking-animated');
       DOM.jerseyCardWrapper.classList.toggle('is-docked', shouldDock);
-      if (siteHeader) siteHeader.classList.toggle('jersey-preview-expanded', isMobileViewport && shouldDock);
+      if (navCard) navCard.classList.toggle('jersey-preview-expanded', dockMode === 'mobile');
       if (jerseyStage) jerseyStage.classList.toggle('is-preview-docked', isMobileViewport && shouldDock);
+
+      if (viewControls && originalControlsParent) {
+        if (dockMode === 'mobile') {
+          if (navCard && viewControls.parentElement !== navCard) navCard.appendChild(viewControls);
+          viewControls.classList.add('is-in-navbar');
+          if (viewControlRow) viewControlRow.classList.add('is-empty');
+        } else {
+          viewControls.classList.remove('is-in-navbar');
+          if (viewControls.parentElement !== originalControlsParent) {
+            originalControlsParent.appendChild(viewControls);
+          }
+          if (viewControlRow) viewControlRow.classList.remove('is-empty');
+        }
+      }
+
+      lastDockMode = dockMode;
+      if (shouldAnimate) requestAnimationFrame(() => animateJerseyPosition(fromRect));
       dockScrollFrame = 0;
     });
   };
