@@ -213,6 +213,8 @@ body {
 
 /* Apple Inputs */
 .apple-glass-input {
+  font-size: max(16px, 1rem);
+  line-height: 1.5;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   border: 1.5px solid rgba(226, 232, 240, 0.85);
@@ -233,6 +235,56 @@ body {
 
 .apple-glass-input::placeholder {
   color: #94a3b8;
+}
+
+.jersey-changes {
+  padding: 12px;
+  border: 1px solid #ddd6fe;
+  border-radius: 14px;
+  background: #f5f3ff;
+  color: #334155;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.jersey-changes-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.jersey-changes-header h2 {
+  color: #4c1d95;
+  font-weight: 700;
+}
+
+#jerseyChangesStatus {
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+#jerseyChangesList > div {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#jerseyChangesList dd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+#jerseyChangesList dd > span {
+  color: #64748b;
+}
+
+#jerseyChangesList dd > strong {
+  color: #4c1d95;
 }
 
 /* Size Pills (Apple Style) */
@@ -315,6 +367,11 @@ body {
     box-shadow 0.28s ease, opacity 0.18s ease;
 }
 
+.jersey-card-wrapper.is-dual-view {
+  max-width: 680px;
+  aspect-ratio: 2.283 / 1;
+}
+
 .jersey-card-wrapper.is-docked {
   position: absolute !important;
   top: 10px !important;
@@ -342,9 +399,8 @@ body {
 }
 
 @media (max-width: 767px) {
-  #inputStudentNumber {
-    font-size: 16px !important;
-    scroll-margin-top: 84px;
+  body.is-mobile-form-editing {
+    padding-bottom: var(--keyboard-inset, 0px);
   }
 
   .apple-glass-nav.jersey-preview-expanded {
@@ -352,11 +408,16 @@ body {
   }
 
   .apple-glass-nav.is-form-editing {
-    transition-duration: 0.16s;
+    transition: none;
   }
 
-  .apple-glass-nav.is-form-editing .jersey-card-wrapper.is-docked {
-    opacity: 0;
+  .apple-glass-nav.is-personalizing {
+    gap: 8px;
+    padding: 6px 12px;
+  }
+
+  .apple-glass-nav.is-personalizing > a {
+    display: none;
   }
 
   #jerseyViewControlRow.is-empty {
@@ -392,8 +453,13 @@ body {
     overflow: visible;
   }
 
-  .jersey-stage-container.is-form-editing {
+  body.is-mobile-form-editing .jersey-preview-column {
     display: none !important;
+  }
+
+  .jersey-card-wrapper {
+    max-width: 228px;
+    transition: none;
   }
 
   .jersey-card-wrapper.is-docked {
@@ -418,8 +484,23 @@ body {
     pointer-events: none;
   }
 
-  .jersey-card-wrapper.is-docking-animated {
-    transition: none !important;
+  .apple-glass-nav.is-personalizing #jerseyViewControls.is-in-navbar {
+    position: static;
+    margin-left: auto;
+  }
+
+  .apple-glass-nav.is-personalizing .jersey-card-wrapper.is-docked {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    flex: 0 1 auto;
+    order: -1;
+    width: clamp(88px, 31vw, 128px) !important;
+    min-width: 0;
+  }
+
+  .apple-glass-nav.is-personalizing.has-short-viewport .jersey-card-wrapper.is-docked {
+    width: 64px !important;
   }
 }
 
@@ -484,9 +565,6 @@ body.size-guide-open {
   background-position: center;
   background-repeat: no-repeat;
   background-color: transparent !important;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  opacity: 1;
-  transform: scale(1);
 }
 
 .jersey-hd-front {
@@ -499,9 +577,6 @@ body.size-guide-open {
   background-position: center;
   background-repeat: no-repeat;
   background-color: transparent !important;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  opacity: 1;
-  transform: scale(1);
 }
 
 .jersey-hd-both {
@@ -514,9 +589,19 @@ body.size-guide-open {
   background-position: left center, right center;
   background-repeat: no-repeat, no-repeat;
   background-color: transparent !important;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  opacity: 1;
-  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .jersey-hd-back,
+  .jersey-hd-front,
+  .jersey-hd-both {
+    animation: jerseyViewIn 0.2s ease-out;
+  }
+}
+
+@keyframes jerseyViewIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .jersey-svg-overlay {

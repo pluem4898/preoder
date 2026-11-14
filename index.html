@@ -36,7 +36,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261115-10">
+  <link rel="stylesheet" href="style.css?v=20261115-11">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -89,14 +89,14 @@
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
       <!-- ================= LEFT: PURE TRANSPARENT PRODUCT STAGE ================= -->
-      <div class="lg:col-span-6 flex flex-col items-center justify-center space-y-4">
+      <div class="jersey-preview-column lg:col-span-6 flex flex-col items-center justify-center space-y-4">
 
         <!-- View mode controls -->
         <div id="jerseyViewControlRow" class="w-full flex items-center justify-between px-2 mb-2">
-          <div id="jerseyViewControls" class="apple-segmented-control">
-            <button type="button" id="btnViewBack" class="apple-segmented-btn active">ด้านหลัง</button>
-            <button type="button" id="btnViewFront" class="apple-segmented-btn">ด้านหน้า</button>
-            <button type="button" id="btnViewBoth" class="apple-segmented-btn hidden sm:inline-block">คู่หน้า-หลัง</button>
+          <div id="jerseyViewControls" class="apple-segmented-control" role="group" aria-label="มุมมองเสื้อ">
+            <button type="button" id="btnViewBack" class="apple-segmented-btn active" aria-pressed="true">ด้านหลัง</button>
+            <button type="button" id="btnViewFront" class="apple-segmented-btn" aria-pressed="false">ด้านหน้า</button>
+            <button type="button" id="btnViewBoth" class="apple-segmented-btn hidden sm:inline-block" aria-pressed="false">คู่หน้า-หลัง</button>
           </div>
         </div>
 
@@ -179,14 +179,14 @@
                 <input type="text" id="inputStudentNumber" inputmode="text" autocapitalize="off"
                   autocomplete="off" enterkeyhint="done" pattern="[0-9]{1,3}[ก-ฮ]?"
                   maxlength="4" placeholder="เช่น 08, 8ก, 5ข" required
-                  class="apple-glass-input w-full px-3.5 py-2.5 text-sm">
+                  class="apple-glass-input w-full px-3.5 py-2.5">
               </div>
               <div class="space-y-1.5">
                 <label for="inputRoom" class="text-xs font-semibold text-slate-700">
                   ห้อง <span class="text-red-500">*</span>
                 </label>
                 <select id="inputRoom" required
-                  class="apple-glass-input w-full px-3.5 py-2.5 text-sm cursor-pointer">
+                  class="apple-glass-input w-full px-3.5 py-2.5 cursor-pointer">
                   <option value="">เลือกห้องเรียน</option>
                   <optgroup label="ม.1">
                     <option value="ม.1/3">ม.1/3</option>
@@ -249,7 +249,8 @@
                 </button>
               </div>
               <input type="text" id="inputScreenName" placeholder="MESSI, AUTHONG" maxlength="16" required
-                class="apple-glass-input w-full px-3.5 py-2.5 text-sm uppercase tracking-wider font-semibold font-sport-bold">
+                autocapitalize="characters" spellcheck="false" enterkeyhint="done"
+                class="apple-glass-input w-full px-3.5 py-2.5 uppercase tracking-wider font-semibold font-sport-bold">
             </div>
 
             <!-- Number Input -->
@@ -264,8 +265,8 @@
                 </button>
               </div>
               <input type="text" id="inputScreenNumber" placeholder="10" inputmode="numeric" pattern="[0-9]{1,2}"
-                maxlength="2" required
-                class="apple-glass-input w-full px-3.5 py-2.5 text-sm font-black font-mono text-purple-900 text-center">
+                maxlength="2" enterkeyhint="done" required
+                class="apple-glass-input w-full px-3.5 py-2.5 font-black font-mono text-purple-900 text-center">
             </div>
 
           </div>
@@ -303,6 +304,24 @@
                 (52")</button>
             </div>
           </div>
+
+          <section id="jerseyChanges" class="jersey-changes hidden" aria-labelledby="jerseyChangesTitle">
+            <div class="jersey-changes-header">
+              <h2 id="jerseyChangesTitle">สรุปการแก้ไขเสื้อ</h2>
+              <p id="jerseyChangesStatus" role="status"></p>
+            </div>
+            <dl id="jerseyChangesList"></dl>
+          </section>
+          <template id="jerseyChangeRow">
+            <div>
+              <dt></dt>
+              <dd>
+                <span><span class="sr-only">เดิม </span><span data-before></span></span>
+                <span aria-hidden="true">→</span>
+                <strong><span class="sr-only">ใหม่ </span><span data-after></span></strong>
+              </dd>
+            </div>
+          </template>
 
           <!-- 4. Payment Transfer & Slip Upload Section (หน้าอัปสลิป) -->
           <div id="slipUploadSection" class="space-y-3 pt-2 border-t border-slate-200/60">
@@ -605,7 +624,7 @@
           Google Apps Script Web App URL:
         </label>
         <input type="url" id="inputGasUrl" placeholder="https://script.google.com/macros/s/.../exec"
-          class="apple-glass-input w-full px-3.5 py-2.5 text-xs font-mono">
+          class="apple-glass-input w-full px-3.5 py-2.5 font-mono">
         <p class="text-[11px] text-slate-500">
           * นำ URL จาก Apps Script (Deploy &rarr; New deployment &rarr; Web app) มาวางที่นี่
         </p>
@@ -736,7 +755,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261115-9"></script>
+  <script src="app.js?v=20261115-10"></script>
 </body>
 
 </html>

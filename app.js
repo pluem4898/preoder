@@ -41,6 +41,7 @@ const AppState = {
     : (localStorage.getItem('PURPLE_JERSEY_GAS_URL') || 'https://script.google.com/macros/s/AKfycby4uoyfn-QCbTk2BqZnzb1ZOt54AjAXMe5y0ahMKzFj7MZZQzNeTe8PAcHg5SrynOzhAQ/exec'),
   spreadsheetId: '1WOI_8VSHi_6FIaifxPNuX7hTHEElSVKeR8InFHSQZLw',
   existingRecord: null,
+  savedJerseyChanges: [],
   orders: []
 };
 
@@ -70,6 +71,10 @@ const DOM = {
   btnCapsName: document.getElementById('btnCapsName'),
   sizeBtns: document.querySelectorAll('.size-btn'),
   quickSelectSizeBtns: document.querySelectorAll('.btn-quick-select-size'),
+  jerseyChanges: document.getElementById('jerseyChanges'),
+  jerseyChangesStatus: document.getElementById('jerseyChangesStatus'),
+  jerseyChangesList: document.getElementById('jerseyChangesList'),
+  jerseyChangeRow: document.getElementById('jerseyChangeRow'),
 
   // Mode Banner
   modeStatusBanner: document.getElementById('modeStatusBanner'),
@@ -157,6 +162,7 @@ const DOM = {
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  initJerseyDock();
   updateLivePreview();
   checkGasConnection();
   // Removed: loadOrdersDatabase() - No longer using LocalStorage
@@ -203,15 +209,24 @@ function bindEvents() {
   // Personalization inputs
   DOM.inputScreenName.addEventListener('input', (e) => {
     AppState.screenName = e.target.value;
-    updateLivePreview();
+    previewPersonalization();
   });
 
   DOM.inputScreenNumber.addEventListener('input', (e) => {
-    let val = e.target.value.replace(/\D/g, '');
-    if (val.length > 2) val = val.slice(0, 2);
-    AppState.screenNumber = val;
-    e.target.value = val;
-    updateLivePreview();
+    const number = e.target.value.replace(/\D/g, '').slice(0, 2);
+    AppState.screenNumber = number;
+    if (e.target.value !== number) e.target.value = number;
+    previewPersonalization();
+  });
+
+  [DOM.inputScreenName, DOM.inputScreenNumber].forEach(field => {
+    field.addEventListener('focus', showPrintSide);
+    field.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        field.blur();
+      }
+    });
   });
 
   let isStudentNumberComposing = false;
@@ -248,7 +263,7 @@ function bindEvents() {
     DOM.btnCapsName.addEventListener('click', () => {
       AppState.screenName = AppState.screenName.toUpperCase();
       DOM.inputScreenName.value = AppState.screenName;
-      updateLivePreview();
+      previewPersonalization();
     });
   }
 
@@ -258,17 +273,13 @@ function bindEvents() {
       const chosen = luckyNums[Math.floor(Math.random() * luckyNums.length)];
       AppState.screenNumber = chosen;
       DOM.inputScreenNumber.value = chosen;
-      updateLivePreview();
+      previewPersonalization();
     });
   }
 
   // Size pills
   DOM.sizeBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      DOM.sizeBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      AppState.size = btn.getAttribute('data-size');
-    });
+    btn.addEventListener('click', () => selectJerseySize(btn.dataset.size));
   });
 
   // Status pills
@@ -285,14 +296,11 @@ function bindEvents() {
     });
   });
 
-  // Payment Slip Upload Events
+  // Size guide quick selection
   DOM.quickSelectSizeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      const sizeVal = btn.getAttribute('data-select-size');
-      AppState.size = sizeVal;
-      DOM.sizeBtns.forEach(b => {
-        b.classList.toggle('active', b.getAttribute('data-size') === sizeVal);
-      });
+      const sizeVal = btn.dataset.selectSize;
+      selectJerseySize(sizeVal);
       closeSizeGuide();
       showToast(`เลือกไซส์ ${sizeVal} เรียบร้อยแล้ว`, 'success');
     });
@@ -445,30 +453,38 @@ function initSlipUploadEvents() {
       }
     });
   }
+}
+
+function initJerseyDock() {
+  const mobileViewport = window.matchMedia('(max-width: 767px)');
+  const narrowViewport = window.matchMedia('(max-width: 639px)');
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const visualViewport = window.visualViewport;
+  const navCard = document.querySelector('.apple-glass-nav');
+  const jersey = DOM.jerseyCardWrapper;
+  const jerseyStage = jersey.parentElement;
+  const viewControlRow = document.getElementById('jerseyViewControlRow');
+  const viewControls = document.getElementById('jerseyViewControls');
+  const isOrderField = (element) => element?.matches?.('main .apple-glass-input');
 
   let dockScrollFrame = 0;
-  let lastDockMode = null;
-  let isMobileFormEditing = false;
-  let formFocusReleaseTimer = 0;
-  const viewControls = document.getElementById('jerseyViewControls');
-  const viewControlRow = document.getElementById('jerseyViewControlRow');
-  const originalControlsParent = viewControls ? viewControls.parentElement : null;
-  const originalJerseyParent = DOM.jerseyCardWrapper.parentElement;
-  const originalJerseyStage = DOM.jerseyCardWrapper.closest('.jersey-stage-container');
+  let dockMode = null;
+  let dockedByScroll = false;
+  let dockAnimation;
+  let editingField = null;
+  let keyboardInset = 0;
+  let focusReleaseTimer;
+  let fieldRevealTimer;
 
   const animateJerseyPosition = (fromRect) => {
-    const toRect = DOM.jerseyCardWrapper.getBoundingClientRect();
-    if (!fromRect.width || !fromRect.height || !toRect.width || !toRect.height ||
-        typeof DOM.jerseyCardWrapper.animate !== 'function') {
-      DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
-      return;
-    }
+    const toRect = jersey.getBoundingClientRect();
+    if (!fromRect.width || !fromRect.height || !toRect.width || !toRect.height) return;
 
     const translateX = fromRect.left - toRect.left;
     const translateY = fromRect.top - toRect.top;
     const scaleX = fromRect.width / toRect.width;
     const scaleY = fromRect.height / toRect.height;
-    const animation = DOM.jerseyCardWrapper.animate([
+    dockAnimation = jersey.animate([
       {
         transform: `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`,
         transformOrigin: 'top left'
@@ -478,108 +494,106 @@ function initSlipUploadEvents() {
       duration: 460,
       easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
     });
-    animation.onfinish = () => DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
-    animation.oncancel = () => DOM.jerseyCardWrapper.classList.remove('is-docking-animated');
   };
 
   const updateJerseyDock = () => {
     if (dockScrollFrame) return;
     dockScrollFrame = requestAnimationFrame(() => {
-      const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
-      const wasDocked = lastDockMode !== null && lastDockMode !== 'normal';
-      const shouldDock = window.scrollY > (wasDocked ? 220 : 260);
-      const dockMode = shouldDock ? (isMobileViewport ? 'mobile' : 'desktop') : 'normal';
-      const previousMode = lastDockMode;
-      const shouldAnimate = previousMode !== null && previousMode !== dockMode &&
-        (previousMode === 'mobile' || dockMode === 'mobile');
-      const fromRect = shouldAnimate ? DOM.jerseyCardWrapper.getBoundingClientRect() : null;
-      const navCard = document.querySelector('.apple-glass-nav');
-      const jerseyStage = originalJerseyStage;
-
-      if (shouldAnimate) DOM.jerseyCardWrapper.classList.add('is-docking-animated');
-      DOM.jerseyCardWrapper.classList.toggle('is-docked', shouldDock);
-      if (navCard) {
-        navCard.classList.toggle('jersey-preview-expanded', dockMode === 'mobile' && !isMobileFormEditing);
-        navCard.classList.toggle('is-form-editing', isMobileViewport && isMobileFormEditing);
-      }
-      if (jerseyStage) {
-        jerseyStage.classList.toggle('is-preview-docked', isMobileViewport && shouldDock);
-        jerseyStage.classList.toggle('is-form-editing', isMobileViewport && isMobileFormEditing);
-      }
-
-      if (dockMode !== 'normal') {
-        if (navCard && DOM.jerseyCardWrapper.parentElement !== navCard) navCard.appendChild(DOM.jerseyCardWrapper);
-      } else if (DOM.jerseyCardWrapper.parentElement !== originalJerseyParent) {
-        originalJerseyParent.appendChild(DOM.jerseyCardWrapper);
-      }
-
-      if (viewControls && originalControlsParent) {
-        const shouldPlaceControlsInNavbar = isMobileViewport;
-        if (shouldPlaceControlsInNavbar) {
-          if (navCard && viewControls.parentElement !== navCard) navCard.appendChild(viewControls);
-          viewControls.classList.add('is-in-navbar');
-          if (viewControlRow) viewControlRow.classList.add('is-empty');
-        } else {
-          viewControls.classList.remove('is-in-navbar');
-          if (viewControls.parentElement !== originalControlsParent) {
-            originalControlsParent.appendChild(viewControls);
-          }
-          if (viewControlRow) viewControlRow.classList.remove('is-empty');
-        }
-      }
-
-      lastDockMode = dockMode;
-      if (shouldAnimate) animateJerseyPosition(fromRect);
       dockScrollFrame = 0;
+      const isMobile = mobileViewport.matches;
+      const controlsParent = isMobile ? navCard : viewControlRow;
+      if (viewControls.parentElement !== controlsParent) {
+        controlsParent.append(viewControls);
+        viewControls.classList.toggle('is-in-navbar', isMobile);
+        viewControlRow.classList.toggle('is-empty', isMobile);
+      }
+      if (narrowViewport.matches && AppState.viewSide === 'both') setJerseyView('back');
+
+      const isEditing = isMobile && editingField !== null;
+      const isPersonalizing = isEditing &&
+        (editingField === DOM.inputScreenName || editingField === DOM.inputScreenNumber);
+      const visibleHeight = visualViewport?.height ?? window.innerHeight;
+      navCard.classList.toggle('has-short-viewport', isPersonalizing && visibleHeight < 220);
+      const nextKeyboardInset = isEditing && visualViewport && visualViewport.scale <= 1.05
+        ? Math.max(0, Math.round(window.innerHeight - visibleHeight))
+        : 0;
+      if (nextKeyboardInset !== keyboardInset) {
+        keyboardInset = nextKeyboardInset;
+        document.body.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
+      }
+
+      let nextMode = 'stage';
+      if (isEditing) {
+        nextMode = isPersonalizing ? 'personalizing' : 'form';
+      } else {
+        dockedByScroll = window.scrollY > (dockedByScroll ? 220 : 260);
+        if (dockedByScroll) nextMode = isMobile ? 'mobile' : 'desktop';
+      }
+      if (nextMode === dockMode) return;
+
+      const crossesMobileDock = (dockMode === 'stage' && nextMode === 'mobile') ||
+        (dockMode === 'mobile' && nextMode === 'stage');
+      const shouldAnimate = crossesMobileDock && !reducedMotion.matches && typeof jersey.animate === 'function';
+      const fromRect = shouldAnimate ? jersey.getBoundingClientRect() : null;
+      dockAnimation?.cancel();
+
+      const parent = nextMode === 'stage' || nextMode === 'form' ? jerseyStage : navCard;
+      if (jersey.parentElement !== parent) parent.append(jersey);
+      jersey.classList.toggle('is-docked', parent === navCard);
+      navCard.classList.toggle('jersey-preview-expanded', nextMode === 'mobile');
+      navCard.classList.toggle('is-form-editing', isEditing);
+      navCard.classList.toggle('is-personalizing', isPersonalizing);
+      jerseyStage.classList.toggle('is-preview-docked', nextMode === 'mobile');
+      document.body.classList.toggle('is-mobile-form-editing', isEditing);
+
+      dockMode = nextMode;
+      if (fromRect) animateJerseyPosition(fromRect);
     });
   };
-  window.addEventListener('scroll', updateJerseyDock, { passive: true });
-  window.addEventListener('resize', updateJerseyDock, { passive: true });
-  const isEditableField = (element) => Boolean(element && element.matches &&
-    element.matches('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select, [contenteditable="true"]'));
-  let focusedFieldRevealTimer = 0;
-  const revealFocusedField = (delay = 260) => {
-    window.clearTimeout(focusedFieldRevealTimer);
-    focusedFieldRevealTimer = window.setTimeout(() => {
-      const field = document.activeElement;
-      if (!isMobileFormEditing || !isEditableField(field) ||
-          !window.matchMedia('(max-width: 767px)').matches) return;
 
-      const visualViewport = window.visualViewport;
-      const viewportTop = visualViewport ? visualViewport.offsetTop : 0;
-      const viewportBottom = viewportTop + (visualViewport ? visualViewport.height : window.innerHeight);
-      const headerBottom = document.querySelector('.apple-glass-nav')?.getBoundingClientRect().bottom || 72;
-      const visibleTop = Math.max(viewportTop + 12, headerBottom + 12);
-      const visibleBottom = viewportBottom - 20;
-      const fieldRect = field.getBoundingClientRect();
+  const revealFocusedField = (delay) => {
+    window.clearTimeout(fieldRevealTimer);
+    fieldRevealTimer = window.setTimeout(() => {
+      if (!editingField || editingField !== document.activeElement || !mobileViewport.matches ||
+          (visualViewport && visualViewport.scale > 1.05)) return;
 
-      if (fieldRect.top < visibleTop || fieldRect.bottom > visibleBottom) {
-        const targetScrollY = window.scrollY + fieldRect.top - visibleTop;
-        window.scrollTo({ top: Math.max(0, targetScrollY), behavior: 'auto' });
+      const viewportTop = visualViewport?.offsetTop ?? 0;
+      const visibleBottom = viewportTop + (visualViewport?.height ?? window.innerHeight) - 16;
+      const visibleTop = Math.max(viewportTop, navCard.getBoundingClientRect().bottom) + 12;
+      const fieldRect = editingField.getBoundingClientRect();
+
+      if (fieldRect.bottom > visibleBottom) {
+        window.scrollBy({ top: fieldRect.bottom - visibleBottom, behavior: 'auto' });
+      } else if (fieldRect.top < visibleTop) {
+        window.scrollBy({ top: fieldRect.top - visibleTop, behavior: 'auto' });
       }
     }, delay);
   };
-  document.addEventListener('focusin', (event) => {
-    if (!isEditableField(event.target)) return;
-    window.clearTimeout(formFocusReleaseTimer);
-    isMobileFormEditing = true;
+
+  const handleViewportResize = () => {
     updateJerseyDock();
-    revealFocusedField();
+    if (editingField) revealFocusedField(120);
+  };
+  window.addEventListener('scroll', updateJerseyDock, { passive: true });
+  window.addEventListener('resize', handleViewportResize, { passive: true });
+  visualViewport?.addEventListener('resize', handleViewportResize, { passive: true });
+
+  document.addEventListener('focusin', (event) => {
+    if (!isOrderField(event.target)) return;
+    window.clearTimeout(focusReleaseTimer);
+    editingField = event.target;
+    updateJerseyDock();
+    revealFocusedField(260);
   });
   document.addEventListener('focusout', (event) => {
-    if (!isEditableField(event.target)) return;
-    window.clearTimeout(formFocusReleaseTimer);
-    formFocusReleaseTimer = window.setTimeout(() => {
-      isMobileFormEditing = isEditableField(document.activeElement);
+    if (event.target !== editingField) return;
+    window.clearTimeout(fieldRevealTimer);
+    // Let the keyboard close before restoring the full preview.
+    focusReleaseTimer = window.setTimeout(() => {
+      editingField = null;
       updateJerseyDock();
-    }, 450);
+    }, 350);
   });
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-      if (isMobileFormEditing) revealFocusedField(120);
-      updateJerseyDock();
-    }, { passive: true });
-  }
   updateJerseyDock();
 }
 
@@ -887,11 +901,69 @@ function normalizeRoomValue(room) {
   return /^[1-6]\/\d{1,2}$/.test(value) ? `ม.${value}` : value;
 }
 
+function formatScreenName(value) {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function showPrintSide() {
+  if (AppState.viewSide === 'front') setJerseyView('back');
+}
+
+function previewPersonalization() {
+  showPrintSide();
+  updateLivePreview();
+}
+
+function selectJerseySize(size) {
+  AppState.size = size;
+  DOM.sizeBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.size === size));
+  renderJerseyChanges();
+}
+
+function getJerseyChanges(original, updated) {
+  return [
+    { label: 'ชื่อสกรีน', before: formatScreenName(original.name), after: formatScreenName(updated.name) },
+    { label: 'เบอร์เสื้อ', before: String(original.number ?? '').trim(), after: String(updated.number ?? '').trim() },
+    { label: 'ไซส์', before: original.size, after: updated.size }
+  ].filter(({ before, after }) => before !== after);
+}
+
+function renderJerseyChanges() {
+  const original = AppState.existingRecord;
+  DOM.jerseyChanges.classList.toggle('hidden', !original);
+  if (!original) {
+    DOM.jerseyChangesList.replaceChildren();
+    DOM.jerseyChangesStatus.textContent = '';
+    return;
+  }
+
+  const pendingChanges = getJerseyChanges(original, {
+    name: AppState.screenName,
+    number: AppState.screenNumber,
+    size: AppState.size
+  });
+  const visibleChanges = pendingChanges.length ? pendingChanges : AppState.savedJerseyChanges;
+  let status = 'ยังไม่มีการแก้ไข';
+  if (pendingChanges.length) status = 'ยังไม่ได้บันทึก';
+  else if (visibleChanges.length) status = 'บันทึกล่าสุดแล้ว';
+  if (DOM.jerseyChangesStatus.textContent !== status) DOM.jerseyChangesStatus.textContent = status;
+
+  const rows = visibleChanges.map(({ label, before, after }) => {
+    const row = DOM.jerseyChangeRow.content.cloneNode(true);
+    row.querySelector('dt').textContent = label;
+    row.querySelector('[data-before]').textContent = before || 'ว่าง';
+    row.querySelector('[data-after]').textContent = after || 'ว่าง';
+    return row;
+  });
+  DOM.jerseyChangesList.replaceChildren(...rows);
+}
+
 function updateLivePreview() {
-  const name = (AppState.screenName || '').toString().trim();
-  const number = (AppState.screenNumber || '10').toString().trim();
-  const displayName = name || 'YOUR NAME';
-  const displayNumber = number || '10';
+  const name = formatScreenName(AppState.screenName);
+  const number = String(AppState.screenNumber ?? '').trim();
+  const isEditing = AppState.mode === 'edit';
+  const displayName = name || (isEditing ? '' : 'YOUR NAME');
+  const displayNumber = number || (isEditing ? '' : '10');
 
   const { backNumber, backName } = JERSEY_CONFIG;
 
@@ -934,6 +1006,7 @@ function updateLivePreview() {
   }
 
   applyNumberStyle();
+  renderJerseyChanges();
 }
 
 function applyNumberStyle() {
@@ -942,75 +1015,22 @@ function applyNumberStyle() {
   if (DOM.svgBothNumber) DOM.svgBothNumber.setAttribute('class', cls);
 }
 
-// View switcher removed - always show back view
-
 function setJerseyView(side) {
-  console.log('[VIEW] Switching to:', side);
-  
+  if (AppState.viewSide === side) return;
   AppState.viewSide = side;
 
-  [DOM.btnViewBack, DOM.btnViewFront, DOM.btnViewBoth].forEach(btn => {
-    if (btn) btn.classList.remove('active');
-  });
-
-  console.log('[VIEW] Elements:', {
-    backEl: !!DOM.jerseyViewBackEl,
-    frontEl: !!DOM.jerseyViewFrontEl,
-    bothEl: !!DOM.jerseyViewBothEl
-  });
-
-  // Fade out all views first
-  const allViews = [DOM.jerseyViewBackEl, DOM.jerseyViewFrontEl, DOM.jerseyViewBothEl];
-  allViews.forEach(view => {
-    if (view && !view.classList.contains('hidden')) {
-      view.style.opacity = '0';
-      view.style.transform = 'scale(0.95)';
-    }
-  });
-
-  // After fade out, switch views
-  setTimeout(() => {
-    if (side === 'back') {
-      console.log('[VIEW] Showing back');
-      if (DOM.btnViewBack) DOM.btnViewBack.classList.add('active');
-      DOM.jerseyViewBackEl.classList.remove('hidden');
-      DOM.jerseyViewFrontEl.classList.add('hidden');
-      DOM.jerseyViewBothEl.classList.add('hidden');
-      DOM.jerseyCardWrapper.style.maxWidth = '440px';
-      DOM.jerseyCardWrapper.style.aspectRatio = '1324 / 1180';
-      
-      requestAnimationFrame(() => {
-        DOM.jerseyViewBackEl.style.opacity = '1';
-        DOM.jerseyViewBackEl.style.transform = 'scale(1)';
-      });
-    } else if (side === 'front') {
-      console.log('[VIEW] Showing front');
-      if (DOM.btnViewFront) DOM.btnViewFront.classList.add('active');
-      DOM.jerseyViewBackEl.classList.add('hidden');
-      DOM.jerseyViewFrontEl.classList.remove('hidden');
-      DOM.jerseyViewBothEl.classList.add('hidden');
-      DOM.jerseyCardWrapper.style.maxWidth = '440px';
-      DOM.jerseyCardWrapper.style.aspectRatio = '1324 / 1180';
-      
-      requestAnimationFrame(() => {
-        DOM.jerseyViewFrontEl.style.opacity = '1';
-        DOM.jerseyViewFrontEl.style.transform = 'scale(1)';
-      });
-    } else if (side === 'both') {
-      console.log('[VIEW] Showing both');
-      if (DOM.btnViewBoth) DOM.btnViewBoth.classList.add('active');
-      DOM.jerseyViewBackEl.classList.add('hidden');
-      DOM.jerseyViewFrontEl.classList.add('hidden');
-      DOM.jerseyViewBothEl.classList.remove('hidden');
-      DOM.jerseyCardWrapper.style.maxWidth = '680px';
-      DOM.jerseyCardWrapper.style.aspectRatio = '2.283 / 1';
-      
-      requestAnimationFrame(() => {
-        DOM.jerseyViewBothEl.style.opacity = '1';
-        DOM.jerseyViewBothEl.style.transform = 'scale(1)';
-      });
-    }
-  }, 200);
+  const views = [
+    ['back', DOM.jerseyViewBackEl, DOM.btnViewBack],
+    ['front', DOM.jerseyViewFrontEl, DOM.btnViewFront],
+    ['both', DOM.jerseyViewBothEl, DOM.btnViewBoth]
+  ];
+  for (const [viewSide, view, button] of views) {
+    const selected = side === viewSide;
+    view.classList.toggle('hidden', !selected);
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
+  DOM.jerseyCardWrapper.classList.toggle('is-dual-view', side === 'both');
 }
 
 // ==========================================
@@ -1058,9 +1078,9 @@ async function lookupStudentAndShowForm(studentNumber, room) {
       const gasRecord = {
         studentNumber: (result.data.studentNumber || studentNumber).toString(),
         room: normalizeRoomValue(result.data.room || room),
-        name: result.data.name || '',
-        number: (result.data.number || '10').toString(),
-        size: result.data.size || 'L',
+        name: String(result.data.name ?? ''),
+        number: String(result.data.number ?? '').trim(),
+        size: String(result.data.size ?? '').trim().toUpperCase() || 'L',
         price: 390,
         timestamp: result.data.timestamp || '',
         status: result.data.status || 'รอชำระเงิน',
@@ -1105,18 +1125,19 @@ function updateOrdersCountBadge() {
 function switchToEditMode(record) {
   AppState.mode = 'edit';
   AppState.existingRecord = record;
+  AppState.savedJerseyChanges = [];
   AppState.slipChanged = false;
   AppState.slipUrl = record.slipUrl || null;
 
-  AppState.screenName = record.name || '';
-  AppState.screenNumber = record.number || '10';
+  AppState.screenName = record.name;
+  AppState.screenNumber = record.number;
   AppState.studentNumber = (record.studentNumber || '').toString();
   AppState.room = normalizeRoomValue(record.room);
   AppState.size = record.size || 'L';
   AppState.orderStatus = record.status || 'รอชำระเงิน';
 
-  DOM.inputScreenName.value = record.name || '';
-  DOM.inputScreenNumber.value = record.number || '10';
+  DOM.inputScreenName.value = AppState.screenName;
+  DOM.inputScreenNumber.value = AppState.screenNumber;
   DOM.inputStudentNumber.value = AppState.studentNumber;
   DOM.inputRoom.value = AppState.room;
 
@@ -1185,12 +1206,13 @@ function switchToEditMode(record) {
     DOM.paymentStatusDisplay.classList.add('hidden');
   }
 
-  updateLivePreview();
+  previewPersonalization();
 }
 
 function resetToNewMode() {
   AppState.mode = 'new';
   AppState.existingRecord = null;
+  AppState.savedJerseyChanges = [];
   AppState.slipChanged = false;
   AppState.slipUrl = null;
   AppState.slipImage = null;
@@ -1281,9 +1303,11 @@ async function fetchDriveImageViaGAS(fileId) {
 // 8. FORM SUBMISSION & GOOGLE SHEETS
 // ==========================================
 async function handleFormSubmit() {
+  if (AppState.isSubmitting) return;
+
   const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
   const room = DOM.inputRoom.value.trim();
-  const name = DOM.inputScreenName.value.trim();
+  const name = formatScreenName(DOM.inputScreenName.value);
   const number = DOM.inputScreenNumber.value.trim();
 
   if (!name) {
@@ -1324,8 +1348,10 @@ async function handleFormSubmit() {
   AppState.studentNumber = studentNumber;
   AppState.room = room;
 
+  const originalRecord = AppState.existingRecord;
+  const orderActions = [DOM.btnLookupStudent, DOM.btnReset, DOM.btnCancelEditMode, DOM.btnSubmit];
   AppState.isSubmitting = true;
-  DOM.btnSubmit.disabled = true;
+  orderActions.forEach(button => { button.disabled = true; });
   DOM.btnSubmitText.textContent = 'กำลังบันทึกข้อมูล...';
 
   const nowStr = new Date().toLocaleString('th-TH');
@@ -1343,12 +1369,10 @@ async function handleFormSubmit() {
   const orderData = {
     studentNumber: studentNumber,
     room: room,
-    originalStudentNumber: AppState.mode === 'edit' && AppState.existingRecord
-      ? String(AppState.existingRecord.studentNumber || '') : '',
-    originalRoom: AppState.mode === 'edit' && AppState.existingRecord
-      ? normalizeRoomValue(AppState.existingRecord.room) : '',
+    originalStudentNumber: String(originalRecord?.studentNumber ?? ''),
+    originalRoom: normalizeRoomValue(originalRecord?.room),
     productTitle: 'เสื้อแข่งขันทีมสีม่วง 2026',
-    name: name.toUpperCase(),
+    name,
     number: number,
     size: AppState.size,
     price: 390,
@@ -1383,28 +1407,42 @@ async function handleFormSubmit() {
       verifyUrl.searchParams.set('_', Date.now().toString());
       const verifyResponse = await fetch(verifyUrl.toString(), { cache: 'no-store' });
       const verifyResult = await verifyResponse.json();
-      const saved = verifyResult && verifyResult.found && verifyResult.data;
+      const saved = verifyResult?.status === 'success' && verifyResult.found && verifyResult.data;
 
       verified = !!saved
-        && String(saved.studentNumber || '').trim() === studentNumber
-        && String(saved.room || '').trim() === room;
+        && String(saved.studentNumber ?? '').trim() === studentNumber
+        && normalizeRoomValue(saved.room) === room
+        && formatScreenName(saved.name) === orderData.name
+        && String(saved.number ?? '').trim() === orderData.number
+        && String(saved.size ?? '').trim().toUpperCase() === orderData.size;
     }
 
     if (!verified) {
-      throw new Error('Google Sheets did not confirm the student number and room.');
+      throw new Error('Google Sheets did not return the submitted order values.');
     }
   } catch (err) {
     console.warn('Google Sheets sync warning:', err);
-    showToast('บันทึกไม่สำเร็จ กรุณาอัปเดต Apps Script แล้วลองใหม่', 'error');
-    AppState.isSubmitting = false;
-    DOM.btnSubmit.disabled = false;
-    DOM.btnSubmitText.textContent = AppState.mode === 'edit' ? 'บันทึกการแก้ไขข้อมูล' : 'ยืนยันการสั่งจองและส่งสลิป';
+    showToast('ยืนยันการบันทึกจาก Google Sheets ไม่ได้ กรุณาลองตรวจสอบรายการอีกครั้ง', 'error');
     return;
+  } finally {
+    AppState.isSubmitting = false;
+    orderActions.forEach(button => { button.disabled = false; });
+    DOM.btnSubmitText.textContent = AppState.mode === 'edit' ? 'บันทึกการแก้ไขข้อมูล' : 'ยืนยันการสั่งจองและส่งสลิป';
   }
 
-  AppState.isSubmitting = false;
-  DOM.btnSubmit.disabled = false;
-  DOM.btnSubmitText.textContent = AppState.mode === 'edit' ? 'บันทึกการแก้ไขข้อมูล' : 'ยืนยันการสั่งจองและส่งสลิป';
+  if (originalRecord && AppState.existingRecord === originalRecord) {
+    const savedChanges = getJerseyChanges(originalRecord, orderData);
+    if (savedChanges.length) AppState.savedJerseyChanges = savedChanges;
+    AppState.existingRecord = {
+      ...originalRecord,
+      name: orderData.name,
+      number: orderData.number,
+      size: orderData.size,
+      studentNumber: orderData.studentNumber,
+      room: orderData.room
+    };
+    renderJerseyChanges();
+  }
   
   // Reset slip changed flag after successful submit
   AppState.slipChanged = false;
