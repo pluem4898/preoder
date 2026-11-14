@@ -35,7 +35,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261114-3">
+  <link rel="stylesheet" href="style.css?v=20261114-4">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -69,7 +69,7 @@
   <!-- ================= MAIN STUDIO & CONFIGURATOR ================= -->
   <main class="flex-grow max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 relative z-10">
 
-    <!-- Mode Status Alert Banner (Shown when email matches past record) -->
+    <!-- Mode Status Alert Banner (Shown when a student record matches) -->
     <div id="modeStatusBanner"
       class="apple-glass-card p-4 border border-amber-300/80 bg-amber-50/80 text-amber-900 flex items-center justify-between gap-4 hidden transition-all duration-300">
       <div class="flex items-center space-x-3">
@@ -172,33 +172,11 @@
             </div>
           </div>
 
-          <!-- 1. Email Address (Account Lookup) -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <label for="inputEmail" class="text-xs font-semibold text-slate-700">
-                อีเมลของคุณ <span class="text-red-500">*</span>
-              </label>
-              <span id="emailStatusBadge" class="text-[11px] font-semibold text-purple-600 hidden">
-                <i class="fa-solid fa-check text-emerald-500 mr-1"></i>พร้อมใช้งาน
-              </span>
-            </div>
-            <div class="relative">
-              <input type="email" id="inputEmail" placeholder="กรุณากรอกอีเมลก่อน..." required
-                class="apple-glass-input w-full px-3.5 py-2.5 text-sm">
-              <div id="emailLoadingSpinner" class="absolute right-3.5 top-1/2 -translate-y-1/2 hidden text-purple-600">
-                <i class="fa-solid fa-circle-notch fa-spin text-sm"></i>
-              </div>
-            </div>
-            <p class="text-[11px] text-slate-500">
-              <i class="fa-solid fa-info-circle mr-1"></i>กรอกอีเมลเพื่อเริ่มจอง (ถ้ามีข้อมูลเดิมจะดึงมาให้อัตโนมัติ)
-            </p>
-          </div>
-
-          <!-- Student information remains visible before email lookup. -->
+          <!-- Student information is the order lookup key. -->
           <div class="space-y-2">
             <div>
               <h2 class="text-xs font-bold text-slate-800">ข้อมูลนักเรียน</h2>
-              <p class="text-[11px] text-slate-500">กรอกเลขที่และห้องสำหรับตรวจสอบรายชื่อ</p>
+              <p class="text-[11px] text-slate-500">กรอกเลขที่และเลือกห้องเพื่อค้นหาหรือเริ่มสั่งจอง</p>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
@@ -251,9 +229,15 @@
                 </select>
               </div>
             </div>
+            <button type="button" id="btnLookupStudent"
+              class="apple-btn-primary w-full px-3.5 py-2.5 text-sm flex items-center justify-center gap-2">
+              <i id="studentLookupSpinner" class="fa-solid fa-circle-notch fa-spin hidden"></i>
+              <span id="studentLookupText">ตรวจสอบข้อมูล / เริ่มจอง</span>
+            </button>
+            <p id="studentLookupStatus" class="text-[11px] text-slate-500 min-h-4" aria-live="polite"></p>
           </div>
 
-          <!-- 2. Form Content (Hidden until email is valid) -->
+          <!-- 2. Form Content (Shown after student lookup) -->
           <div id="formContentSection" class="space-y-4 hidden">
 
           <!-- 2.1 Personalization: Screen Name & Number -->
@@ -381,7 +365,7 @@
               </div>
             </div>
 
-            <!-- Slip Preview Card (Shown when slip is chosen or synced from email) -->
+            <!-- Slip Preview Card (Shown when slip is chosen or synced from an existing order) -->
             <div id="slipPreviewCard"
               class="hidden apple-glass-card p-3 rounded-2xl border border-purple-200 bg-white/90 space-y-2">
               <div class="flex items-center justify-between gap-2">
@@ -448,7 +432,7 @@
             </p>
           </div>
 
-          <!-- 5. Submit CTA Button (Also hidden until email is valid) -->
+          <!-- 5. Submit CTA Button (Hidden until a student lookup is completed) -->
           <div id="submitButtonSection" class="pt-2 border-t border-slate-200/60 flex items-center gap-2.5 hidden">
             <button type="button" id="btnResetForm" class="apple-btn-secondary px-3.5 py-3 text-xs">
               ล้างค่า
@@ -755,7 +739,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261114-3"></script>
+  <script src="app.js?v=20261114-4"></script>
 </body>
 
 </html>

@@ -40,6 +40,8 @@ function doPost(e) {
     var email = (data.email || "").toString().trim().toLowerCase();
     var studentNumber = (data.studentNumber || data.studentNo || "").toString().replace(/\s+/g, "").trim();
     var room = (data.room || data.classRoom || "").toString().trim();
+    var originalStudentNumber = (data.originalStudentNumber || "").toString().replace(/\s+/g, "").trim();
+    var originalRoom = (data.originalRoom || "").toString().trim();
     var name = (data.name || "").toString().trim().toUpperCase();
     var number = (data.number || "").toString().trim();
     var size = (data.size || "L").toString().trim().toUpperCase();
@@ -48,10 +50,10 @@ function doPost(e) {
     var status = data.status || (data.slipImage || data.slipUrl ? "รอตรวจสอบสลิป" : "รอชำระเงิน");
     var timestamp = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
 
-    if (!email || !studentNumber || !room) {
+    if (!studentNumber || !room) {
       return createJsonResponse({
         status: "error",
-        message: "Required fields: email, studentNumber, and room"
+        message: "Required fields: studentNumber and room"
       });
     }
 
@@ -65,18 +67,53 @@ function doPost(e) {
 
     var values = sheet.getDataRange().getValues();
     var foundRowIndex = -1;
+    var existingEmail = "";
 
-    for (var i = 1; i < values.length; i++) {
-      var rowEmail = (values[i][columns["Email"] - 1] || "").toString().trim().toLowerCase();
-      if (rowEmail === email) {
-        foundRowIndex = i + 1;
-        break;
+    // Keep email-based matching for older clients, then use the original student key for edits.
+    if (email) {
+      for (var i = 1; i < values.length; i++) {
+        var rowEmail = (values[i][columns["Email"] - 1] || "").toString().trim().toLowerCase();
+        if (rowEmail === email) {
+          foundRowIndex = i + 1;
+          existingEmail = rowEmail;
+          break;
+        }
       }
     }
+
+    if (foundRowIndex < 0 && originalStudentNumber && originalRoom) {
+      for (var j = 1; j < values.length; j++) {
+        var oldNumber = (values[j][columns["Student No."] - 1] || "").toString();
+        var oldRoom = (values[j][columns["Room"] - 1] || "").toString();
+        if (normalizeStudentNumberKey(oldNumber) === normalizeStudentNumberKey(originalStudentNumber)
+          && normalizeRoomKey(oldRoom) === normalizeRoomKey(originalRoom)) {
+          foundRowIndex = j + 1;
+          existingEmail = (values[j][columns["Email"] - 1] || "").toString().trim().toLowerCase();
+          break;
+        }
+      }
+    }
+
+    if (foundRowIndex < 0) {
+      for (var k = 1; k < values.length; k++) {
+        var currentNumber = (values[k][columns["Student No."] - 1] || "").toString();
+        var currentRoom = (values[k][columns["Room"] - 1] || "").toString();
+        if (normalizeStudentNumberKey(currentNumber) === normalizeStudentNumberKey(studentNumber)
+          && normalizeRoomKey(currentRoom) === normalizeRoomKey(room)) {
+          foundRowIndex = k + 1;
+          existingEmail = (values[k][columns["Email"] - 1] || "").toString().trim().toLowerCase();
+          break;
+        }
+      }
+    }
+
+    var slipOwnerKey = email || existingEmail
+      || ("room_" + room.replace(/^ม\./, "").replace(/\//g, "_") + "_no_" + studentNumber);
 
     if (foundRowIndex > 0) {
       // UPDATE existing row
       sheet.getRange(foundRowIndex, columns["Timestamp"]).setValue(timestamp);
+      if (email) sheet.getRange(foundRowIndex, columns["Email"]).setValue(email);
       sheet.getRange(foundRowIndex, columns["Student No."]).setValue(studentNumber);
       sheet.getRange(foundRowIndex, columns["Room"]).setValue(room);
       sheet.getRange(foundRowIndex, columns["Screen Name"]).setValue(name);
@@ -89,7 +126,7 @@ function doPost(e) {
       
       // กรณีที่ 1: มีรูปสลิป base64 ใหม่ = อัปโหลดใหม่
       if (slipImage && slipImage.indexOf('data:image') === 0) {
-        var imageUrl = saveSlipToDrive(slipImage, email);
+        var imageUrl = saveSlipToDrive(slipImage, slipOwnerKey);
         if (imageUrl) {
           slipCell.setFormula('=IMAGE("' + imageUrl + '", 4, 100, 100)');
           sheet.setRowHeight(foundRowIndex, 110);
@@ -117,7 +154,6 @@ function doPost(e) {
         row: foundRowIndex,
         data: {
           timestamp: timestamp,
-          email: email,
           studentNumber: studentNumber,
           room: room,
           name: name,
@@ -136,7 +172,7 @@ function doPost(e) {
       var imageUrl = null;
       
       if (slipImage && slipImage.indexOf('data:image') === 0) {
-        imageUrl = saveSlipToDrive(slipImage, email);
+        imageUrl = saveSlipToDrive(slipImage, slipOwnerKey);
         if (imageUrl) {
           slipFormula = '=IMAGE("' + imageUrl + '", 4, 100, 100)';
         } else {
@@ -171,7 +207,6 @@ function doPost(e) {
         message: "บันทึกการสั่งจองใหม่เรียบร้อยแล้ว",
         data: {
           timestamp: timestamp,
-          email: email,
           studentNumber: studentNumber,
           room: room,
           name: name,
@@ -199,6 +234,8 @@ function doGet(e) {
     var params = e.parameter || {};
     var action = params.action || "";
     var email = (params.email || "").toString().trim().toLowerCase();
+    var studentNumber = (params.studentNumber || params.studentNo || "").toString().replace(/\s+/g, "").trim();
+    var room = (params.room || params.classRoom || "").toString().trim();
     var fileId = params.fileId || "";
 
     // NEW: Serve image from Drive as base64
@@ -234,10 +271,16 @@ function doGet(e) {
     var columns = getColumnMap(sheet);
     var values = sheet.getDataRange().getValues();
 
-    if (action === "search" && email) {
+    if (action === "search" && (email || (studentNumber && room))) {
       for (var i = 1; i < values.length; i++) {
         var rowEmail = (values[i][columns["Email"] - 1] || "").toString().trim().toLowerCase();
-        if (rowEmail === email) {
+        var rowStudentNumber = (values[i][columns["Student No."] - 1] || "").toString();
+        var rowRoom = (values[i][columns["Room"] - 1] || "").toString();
+        var matchesEmail = email && rowEmail === email;
+        var matchesStudent = studentNumber && room
+          && normalizeStudentNumberKey(rowStudentNumber) === normalizeStudentNumberKey(studentNumber)
+          && normalizeRoomKey(rowRoom) === normalizeRoomKey(room);
+        if (matchesEmail || matchesStudent) {
           // Extract slipUrl from IMAGE formula if exists
           var slipCellValue = values[i][columns["Payment Slip"] - 1] || "";
           var slipUrl = "";
@@ -255,7 +298,6 @@ function doGet(e) {
             found: true,
             data: {
               timestamp: values[i][columns["Timestamp"] - 1],
-              email: values[i][columns["Email"] - 1],
               studentNumber: (values[i][columns["Student No."] - 1] || "").toString(),
               room: (values[i][columns["Room"] - 1] || "").toString(),
               name: values[i][columns["Screen Name"] - 1],
@@ -272,17 +314,16 @@ function doGet(e) {
       return createJsonResponse({
         status: "success",
         found: false,
-        message: "Email not found"
+        message: "Student record not found"
       });
     }
 
     if (action === "list") {
       var orders = [];
       for (var j = 1; j < values.length; j++) {
-        if (values[j][columns["Email"] - 1]) {
+        if (values[j][columns["Student No."] - 1] || values[j][columns["Email"] - 1]) {
           orders.push({
             timestamp: values[j][columns["Timestamp"] - 1],
-            email: values[j][columns["Email"] - 1],
             studentNumber: (values[j][columns["Student No."] - 1] || "").toString(),
             room: (values[j][columns["Room"] - 1] || "").toString(),
             name: values[j][columns["Screen Name"] - 1],
@@ -405,6 +446,18 @@ function getColumnMap(sheet) {
   return columns;
 }
 
+function normalizeStudentNumberKey(value) {
+  var text = (value || "").toString().replace(/\s+/g, "").trim();
+  var match = text.match(/^0*([0-9]+)([ก-ฮ]?)$/);
+  if (!match) return text;
+  return String(parseInt(match[1], 10)) + match[2];
+}
+
+function normalizeRoomKey(value) {
+  var text = (value || "").toString().trim();
+  return /^[1-6]\/\d{1,2}$/.test(text) ? "ม." + text : text;
+}
+
 function createJsonResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
@@ -413,11 +466,12 @@ function createJsonResponse(data) {
 /**
  * บันทึกรูปสลิป (Base64) ลง Google Drive
  * @param {string} base64Data - Base64 encoded image (data:image/jpeg;base64,...)
- * @param {string} email - Email สำหรับตั้งชื่อไฟล์
+ * @param {string} ownerKey - Student or email key for naming the uploaded file
  * @return {string} URL ของรูปภาพที่บันทึกแล้ว หรือ null ถ้าไม่สำเร็จ
  */
-function saveSlipToDrive(base64Data, email) {
+function saveSlipToDrive(base64Data, ownerKey) {
   try {
+    ownerKey = (ownerKey || "student").toString().trim();
     // แยก metadata และ base64 data
     var contentType = base64Data.split(',')[0].split(':')[1].split(';')[0];
     var base64String = base64Data.split(',')[1];
@@ -427,7 +481,7 @@ function saveSlipToDrive(base64Data, email) {
     
     // สร้างชื่อไฟล์ที่ไม่ซ้ำ
     var timestamp = new Date().getTime();
-    var fileName = 'slip_' + email.replace(/[^a-zA-Z0-9]/g, '_') + '_' + timestamp + '.jpg';
+    var fileName = 'slip_' + ownerKey.replace(/[^a-zA-Z0-9]/g, '_') + '_' + timestamp + '.jpg';
     
     // สร้าง Blob
     var blob = Utilities.newBlob(decoded, contentType, fileName);
@@ -435,8 +489,8 @@ function saveSlipToDrive(base64Data, email) {
     // หาหรือสร้างโฟลเดอร์สำหรับเก็บสลิป
     var folder = getOrCreateFolder();
     
-    // ลบไฟล์เก่าของ email เดียวกัน (ถ้ามี)
-    deleteOldSlips(email, folder);
+    // ลบไฟล์เก่าของเจ้าของรายการเดียวกัน (ถ้ามี)
+    deleteOldSlips(ownerKey, folder);
     
     // สร้างไฟล์ใหม่
     var file = folder.createFile(blob);
@@ -454,11 +508,11 @@ function saveSlipToDrive(base64Data, email) {
 }
 
 /**
- * ลบไฟล์สลิปเก่าของ email นี้ (ถ้ามี)
+ * ลบไฟล์สลิปเก่าของ owner key นี้ (ถ้ามี)
  */
-function deleteOldSlips(email, folder) {
+function deleteOldSlips(ownerKey, folder) {
   try {
-    var searchPattern = 'slip_' + email.replace(/[^a-zA-Z0-9]/g, '_');
+    var searchPattern = 'slip_' + ownerKey.replace(/[^a-zA-Z0-9]/g, '_');
     var files = folder.getFilesByName(searchPattern);
     
     // ถ้าไม่เจอด้วยชื่อแน่นอน ให้ลองหาทุกไฟล์ที่เริ่มต้นด้วย pattern

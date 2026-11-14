@@ -23,7 +23,6 @@ const JERSEY_CONFIG = {
 const AppState = {
   mode: 'new', // 'new' | 'edit'
   viewSide: 'back', // 'back' | 'front' | 'both'
-  email: '',
   studentNumber: '',
   room: '',
   size: 'L',
@@ -36,7 +35,6 @@ const AppState = {
   slipUploadedAt: null,
   slipUrl: null, // URL of uploaded slip on Drive
   slipChanged: false, // Track if slip was changed during edit mode
-  isSearchingEmail: false,
   isSubmitting: false,
   gasUrl: (typeof CONFIG !== 'undefined' && CONFIG.gasUrl) 
     ? CONFIG.gasUrl 
@@ -54,15 +52,16 @@ const DEFAULT_DEMO_ORDERS = [];
 // ==========================================
 const DOM = {
   // Form Inputs & Buttons
-  inputEmail: document.getElementById('inputEmail'),
-  emailLoadingSpinner: document.getElementById('emailLoadingSpinner'),
-  emailStatusBadge: document.getElementById('emailStatusBadge'),
   formContentSection: document.getElementById('formContentSection'),
   submitButtonSection: document.getElementById('submitButtonSection'),
   inputScreenName: document.getElementById('inputScreenName'),
   inputScreenNumber: document.getElementById('inputScreenNumber'),
   inputStudentNumber: document.getElementById('inputStudentNumber'),
   inputRoom: document.getElementById('inputRoom'),
+  btnLookupStudent: document.getElementById('btnLookupStudent'),
+  studentLookupSpinner: document.getElementById('studentLookupSpinner'),
+  studentLookupText: document.getElementById('studentLookupText'),
+  studentLookupStatus: document.getElementById('studentLookupStatus'),
   btnSubmit: document.getElementById('btnSubmit'),
   btnSubmitText: document.getElementById('btnSubmitText'),
   btnSubmitIcon: document.getElementById('btnSubmitIcon'),
@@ -167,32 +166,28 @@ document.addEventListener('DOMContentLoaded', () => {
 // 4. EVENT BINDINGS
 // ==========================================
 function bindEvents() {
-  // 1. Smart Email Sync
-  let emailDebounceTimer;
-  let lastSearchedEmail = ''; // Track last searched email
-  
-  DOM.inputEmail.addEventListener('input', (e) => {
-    AppState.email = e.target.value.trim();
-    clearTimeout(emailDebounceTimer);
-    
-    if (isValidEmail(AppState.email)) {
-      // Only search if email changed
-      if (AppState.email !== lastSearchedEmail) {
-        emailDebounceTimer = setTimeout(() => {
-          lastSearchedEmail = AppState.email;
-          lookupEmailAndShowForm(AppState.email);
-        }, 500);
-      }
-    } else {
-      // Clear form when email is invalid
-      lastSearchedEmail = '';
-      resetToNewMode();
-      hideFormContent();
-      DOM.emailStatusBadge.classList.add('hidden');
+  // Student number + room identify and load an existing order.
+  DOM.btnLookupStudent.addEventListener('click', () => {
+    const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
+    const room = DOM.inputRoom.value.trim();
+
+    if (!/^[0-9]{1,3}[ก-ฮ]?$/u.test(studentNumber)) {
+      showToast('กรุณากรอกเลขที่ เช่น 8, 08, 8ก หรือ 5ข', 'error');
+      DOM.inputStudentNumber.focus();
+      return;
     }
+    if (!room) {
+      showToast('กรุณาเลือกห้องเรียน', 'error');
+      DOM.inputRoom.focus();
+      return;
+    }
+
+    AppState.studentNumber = studentNumber;
+    AppState.room = room;
+    lookupStudentAndShowForm(studentNumber, room);
   });
 
-  // 2. Personalization inputs
+  // Personalization inputs
   DOM.inputScreenName.addEventListener('input', (e) => {
     AppState.screenName = e.target.value;
     updateLivePreview();
@@ -409,6 +404,18 @@ function initSlipUploadEvents() {
       }
     });
   }
+
+  let dockScrollFrame = 0;
+  const updateJerseyDock = () => {
+    if (dockScrollFrame) return;
+    dockScrollFrame = requestAnimationFrame(() => {
+      DOM.jerseyCardWrapper.classList.toggle('is-docked', window.scrollY > 260);
+      dockScrollFrame = 0;
+    });
+  };
+  window.addEventListener('scroll', updateJerseyDock, { passive: true });
+  window.addEventListener('resize', updateJerseyDock, { passive: true });
+  updateJerseyDock();
 }
 
 // ==========================================
@@ -842,7 +849,7 @@ function setJerseyView(side) {
 }
 
 // ==========================================
-// 7. SMART EMAIL LOOKUP & DATABASE
+// 7. STUDENT LOOKUP & DATABASE
 // ==========================================
 function hideFormContent() {
   if (DOM.formContentSection) DOM.formContentSection.classList.add('hidden');
@@ -855,81 +862,67 @@ function showFormContent() {
   if (DOM.submitButtonSection) DOM.submitButtonSection.classList.remove('hidden');
 }
 
-async function lookupEmailAndShowForm(email) {
-  // Clear previous data first
-  DOM.emailLoadingSpinner.classList.remove('hidden');
-  DOM.emailStatusBadge.classList.add('hidden');
-
-  console.log('Looking up email:', email);
-  console.log('GAS URL:', AppState.gasUrl);
-
-  // Check Google Sheets only
-  if (AppState.gasUrl) {
-    try {
-      const searchUrl = `${AppState.gasUrl}?action=search&email=${encodeURIComponent(email)}`;
-      console.log('Fetching:', searchUrl);
-      
-      const resp = await fetch(searchUrl);
-      console.log('Response status:', resp.status);
-      console.log('Response type:', resp.headers.get('content-type'));
-      
-      const text = await resp.text();
-      console.log('Response text (first 200 chars):', text.substring(0, 200));
-      
-      let result;
-      try {
-        result = JSON.parse(text);
-        console.log('Parsed JSON:', result);
-      } catch (parseErr) {
-        console.error('JSON parse error:', parseErr);
-        console.error('Response is not JSON, probably HTML error page');
-        throw new Error('Invalid response from server');
-      }
-      
-      DOM.emailLoadingSpinner.classList.add('hidden');
-
-      if (result && result.found && result.data) {
-        // Found existing record - load it
-        const gasRecord = {
-          email: result.data.email || email,
-          studentNumber: (result.data.studentNumber || '').toString(),
-          room: normalizeRoomValue(result.data.room),
-          name: result.data.name || '',
-          number: (result.data.number || '10').toString(),
-          size: result.data.size || 'L',
-          price: 390,
-          timestamp: result.data.timestamp || '',
-          status: result.data.status || 'Confirmed',
-          slipUrl: result.data.slipUrl || null,
-          slipImage: result.data.slipUrl || null,
-          slipFileName: 'สลิปการโอนเงินเดิม.jpg'
-        };
-        
-        console.log('Found record, loading data...');
-        switchToEditMode(gasRecord);
-        showFormContent();
-        showToast('พบข้อมูลจาก Google Sheets! ดึงข้อมูลมาให้แล้ว', 'success');
-        return;
-      } else {
-        console.log('Email not found in Sheets');
-      }
-    } catch (err) {
-      console.error('GAS lookup error:', err);
-      DOM.emailLoadingSpinner.classList.add('hidden');
-      showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ Google Sheets', 'error');
-    }
-  } else {
-    console.warn('No GAS URL configured');
-    DOM.emailLoadingSpinner.classList.add('hidden');
-  }
-
-  // New user - clear everything and start fresh
-  console.log('New user, clearing form...');
+async function lookupStudentAndShowForm(studentNumber, room) {
+  hideFormContent();
   resetToNewMode();
-  showFormContent();
-  DOM.emailStatusBadge.classList.remove('hidden');
-  DOM.emailStatusBadge.innerHTML = '<i class="fa-solid fa-check text-emerald-500 mr-1"></i>อีเมลใหม่ พร้อมสั่งจอง';
-  showToast('ยินดีต้อนรับ! กรอกข้อมูลด้านล่างเพื่อสั่งจอง', 'success');
+  AppState.studentNumber = studentNumber;
+  AppState.room = room;
+  DOM.inputStudentNumber.value = studentNumber;
+  DOM.inputRoom.value = room;
+  DOM.studentLookupSpinner.classList.remove('hidden');
+  DOM.studentLookupText.textContent = 'กำลังตรวจสอบ...';
+  DOM.studentLookupStatus.textContent = '';
+  DOM.btnLookupStudent.disabled = true;
+
+  try {
+    if (!AppState.gasUrl) throw new Error('Google Apps Script URL is not configured.');
+
+    const searchUrl = new URL(AppState.gasUrl);
+    searchUrl.searchParams.set('action', 'search');
+    searchUrl.searchParams.set('studentNumber', studentNumber);
+    searchUrl.searchParams.set('room', room);
+    searchUrl.searchParams.set('_', Date.now().toString());
+
+    const response = await fetch(searchUrl.toString(), { cache: 'no-store' });
+    const result = await response.json();
+    if (!result || result.status !== 'success') {
+      throw new Error(result && result.message ? result.message : 'Invalid response from Google Sheets.');
+    }
+
+    if (result.found && result.data) {
+      const gasRecord = {
+        studentNumber: (result.data.studentNumber || studentNumber).toString(),
+        room: normalizeRoomValue(result.data.room || room),
+        name: result.data.name || '',
+        number: (result.data.number || '10').toString(),
+        size: result.data.size || 'L',
+        price: 390,
+        timestamp: result.data.timestamp || '',
+        status: result.data.status || 'รอชำระเงิน',
+        slipUrl: result.data.slipUrl || null,
+        slipImage: result.data.slipUrl || null,
+        slipFileName: 'สลิปการโอนเงินเดิม.jpg'
+      };
+
+      switchToEditMode(gasRecord);
+      showFormContent();
+      DOM.studentLookupStatus.textContent = 'พบข้อมูลเดิมแล้ว ดึงรายละเอียดคำสั่งจองมาให้';
+      showToast('พบข้อมูลเดิมจาก Google Sheets', 'success');
+      return;
+    }
+
+    showFormContent();
+    DOM.studentLookupStatus.textContent = `ยังไม่มีรายการของเลขที่ ${studentNumber} ห้อง ${room} เริ่มสั่งจองได้`;
+    showToast('ไม่พบข้อมูลเดิม เริ่มสั่งจองใหม่ได้', 'success');
+  } catch (err) {
+    console.error('Google Sheets lookup error:', err);
+    DOM.studentLookupStatus.textContent = 'เชื่อมต่อ Google Sheets ไม่สำเร็จ ลองตรวจสอบ Apps Script';
+    showToast('เกิดข้อผิดพลาดในการค้นหา Google Sheets', 'error');
+  } finally {
+    DOM.studentLookupSpinner.classList.add('hidden');
+    DOM.studentLookupText.textContent = 'ตรวจสอบข้อมูล / เริ่มจอง';
+    DOM.btnLookupStudent.disabled = false;
+  }
 }
 function loadOrdersDatabase() {
   // Removed LocalStorage - using Google Sheets only
@@ -942,11 +935,6 @@ function saveOrdersToLocal() {
 
 function updateOrdersCountBadge() {
   // Removed - no longer tracking local count
-}
-
-async function lookupEmail(email) {
-  // This function is now replaced by lookupEmailAndShowForm
-  await lookupEmailAndShowForm(email);
 }
 
 function switchToEditMode(record) {
@@ -1081,17 +1069,15 @@ function resetForm() {
   AppState.studentNumber = '';
   AppState.room = '';
   AppState.size = 'L';
-  AppState.email = '';
   AppState.slipImage = null;
   AppState.slipFileName = '';
   AppState.slipUploadedAt = null;
 
-  DOM.inputEmail.value = '';
   DOM.inputScreenName.value = '';
   DOM.inputScreenNumber.value = '10';
   DOM.inputStudentNumber.value = '';
   DOM.inputRoom.value = '';
-  DOM.emailStatusBadge.classList.add('hidden');
+  DOM.studentLookupStatus.textContent = '';
 
   DOM.sizeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-size') === 'L'));
 
@@ -1130,17 +1116,10 @@ async function fetchDriveImageViaGAS(fileId) {
 // 8. FORM SUBMISSION & GOOGLE SHEETS
 // ==========================================
 async function handleFormSubmit() {
-  const email = DOM.inputEmail.value.trim();
   const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
   const room = DOM.inputRoom.value.trim();
   const name = DOM.inputScreenName.value.trim();
   const number = DOM.inputScreenNumber.value.trim();
-
-  if (!email || !isValidEmail(email)) {
-    showToast('กรุณากรอกอีเมลให้ถูกต้อง', 'error');
-    DOM.inputEmail.focus();
-    return;
-  }
 
   if (!name) {
     showToast('กรุณาระบุชื่อที่ต้องการสกรีน', 'error');
@@ -1191,9 +1170,12 @@ async function handleFormSubmit() {
   console.log('[SUBMIT] Should send slip:', shouldSendSlip);
   
   const orderData = {
-    email: email,
     studentNumber: studentNumber,
     room: room,
+    originalStudentNumber: AppState.mode === 'edit' && AppState.existingRecord
+      ? String(AppState.existingRecord.studentNumber || '') : '',
+    originalRoom: AppState.mode === 'edit' && AppState.existingRecord
+      ? normalizeRoomValue(AppState.existingRecord.room) : '',
     productTitle: 'เสื้อแข่งขันทีมสีม่วง 2026',
     name: name.toUpperCase(),
     number: number,
@@ -1225,7 +1207,8 @@ async function handleFormSubmit() {
 
       const verifyUrl = new URL(AppState.gasUrl);
       verifyUrl.searchParams.set('action', 'search');
-      verifyUrl.searchParams.set('email', email);
+      verifyUrl.searchParams.set('studentNumber', studentNumber);
+      verifyUrl.searchParams.set('room', room);
       verifyUrl.searchParams.set('_', Date.now().toString());
       const verifyResponse = await fetch(verifyUrl.toString(), { cache: 'no-store' });
       const verifyResult = await verifyResponse.json();
@@ -1300,7 +1283,7 @@ function renderOrdersList() {
             <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-xs">Size ${o.size}</span>
           </div>
           <p class="text-[11px] text-slate-600">เลขที่ ${o.studentNumber || '-'} · ห้อง ${o.room || '-'}</p>
-          <p class="text-[11px] text-slate-500 font-mono">${o.email} &bull; ฿${o.price}</p>
+          <p class="text-[11px] text-slate-500 font-mono">฿${o.price}</p>
         </div>
       </div>
       <div class="flex items-center gap-1.5">
@@ -1327,8 +1310,9 @@ window.editOrderFromList = function (idx) {
   const order = AppState.orders[idx];
   if (!order) return;
   closeDatabaseModal();
-  DOM.inputEmail.value = order.email;
-  lookupEmail(order.email);
+  DOM.inputStudentNumber.value = String(order.studentNumber || '');
+  DOM.inputRoom.value = normalizeRoomValue(order.room);
+  lookupStudentAndShowForm(DOM.inputStudentNumber.value, DOM.inputRoom.value);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
@@ -1347,9 +1331,9 @@ function exportOrdersToCSV() {
     return;
   }
 
-  let csv = 'Timestamp,Email,StudentNumber,Room,Name,Number,Size,Style,Price,Status,HasSlip\n';
+  let csv = 'Timestamp,StudentNumber,Room,Name,Number,Size,Style,Price,Status,HasSlip\n';
   AppState.orders.forEach(o => {
-    csv += `"${o.timestamp}","${o.email}","${o.studentNumber || ''}","${o.room || ''}","${o.name}","${o.number}","${o.size}","${o.style}","${o.price}","${o.status || 'Confirmed'}","${o.slipImage ? 'YES' : 'NO'}"\n`;
+    csv += `"${o.timestamp}","${o.studentNumber || ''}","${o.room || ''}","${o.name}","${o.number}","${o.size}","${o.style}","${o.price}","${o.status || 'Confirmed'}","${o.slipImage ? 'YES' : 'NO'}"\n`;
   });
 
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1541,8 +1525,4 @@ function showToast(msg, type = 'info') {
     toast.classList.add('opacity-0', 'translate-y-2');
     setTimeout(() => toast.remove(), 300);
   }, 3000);
-}
-
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
