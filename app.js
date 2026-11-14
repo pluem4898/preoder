@@ -409,7 +409,8 @@ function initSlipUploadEvents() {
   const updateJerseyDock = () => {
     if (dockScrollFrame) return;
     dockScrollFrame = requestAnimationFrame(() => {
-      DOM.jerseyCardWrapper.classList.toggle('is-docked', window.scrollY > 260);
+      const useNavbarDock = window.matchMedia('(min-width: 768px)').matches;
+      DOM.jerseyCardWrapper.classList.toggle('is-docked', useNavbarDock && window.scrollY > 260);
       dockScrollFrame = 0;
     });
   };
