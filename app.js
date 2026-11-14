@@ -207,7 +207,8 @@ function bindEvents() {
   });
 
   DOM.inputStudentNumber.addEventListener('input', (e) => {
-    const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+    const raw = e.target.value.replace(/\s+/g, '');
+    const val = (raw.match(/^[0-9]{0,3}[ก-ฮ]?/u) || [''])[0];
     AppState.studentNumber = val;
     e.target.value = val;
   });
@@ -742,19 +743,21 @@ function updateLivePreview() {
 
   // Back number placement on the new jersey artwork.
   if (DOM.svgBackNumber) {
-    DOM.svgBackNumber.style.fontFamily = "'JerseyMiami', sans-serif";
+    DOM.svgBackNumber.style.fontFamily = "'Press Start 2P', 'Chakra Petch', monospace";
     DOM.svgBackNumber.setAttribute('font-size', backNumber.size.toString());
     DOM.svgBackNumber.setAttribute('x', backNumber.x.toString());
     DOM.svgBackNumber.setAttribute('y', backNumber.y.toString());
+    DOM.svgBackNumber.setAttribute('textLength', (displayNumber.length * 150).toString());
     DOM.svgBackNumber.textContent = displayNumber;
   }
 
   // Both-sides view keeps the back on the left and the supplied front art on the right.
   if (DOM.svgBothNumber) {
-    DOM.svgBothNumber.style.fontFamily = "'JerseyMiami', sans-serif";
+    DOM.svgBothNumber.style.fontFamily = "'Press Start 2P', 'Chakra Petch', monospace";
     DOM.svgBothNumber.setAttribute('font-size', backNumber.size.toString());
     DOM.svgBothNumber.setAttribute('x', backNumber.x.toString());
     DOM.svgBothNumber.setAttribute('y', backNumber.y.toString());
+    DOM.svgBothNumber.setAttribute('textLength', (displayNumber.length * 150).toString());
     DOM.svgBothNumber.textContent = displayNumber;
   }
 
@@ -1128,7 +1131,7 @@ async function fetchDriveImageViaGAS(fileId) {
 // ==========================================
 async function handleFormSubmit() {
   const email = DOM.inputEmail.value.trim();
-  const studentNumber = DOM.inputStudentNumber.value.trim();
+  const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
   const room = DOM.inputRoom.value.trim();
   const name = DOM.inputScreenName.value.trim();
   const number = DOM.inputScreenNumber.value.trim();
@@ -1151,8 +1154,8 @@ async function handleFormSubmit() {
     return;
   }
 
-  if (!/^\d{1,3}$/.test(studentNumber)) {
-    showToast('กรุณากรอกเลขที่เป็นตัวเลข 1-3 หลัก', 'error');
+  if (!/^[0-9]{1,3}[ก-ฮ]?$/u.test(studentNumber)) {
+    showToast('กรุณากรอกเลขที่ เช่น 8, 08, 8ก หรือ 5ข', 'error');
     DOM.inputStudentNumber.focus();
     return;
   }

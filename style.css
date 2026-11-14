@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=Kanit:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=SF+Pro+Display:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=Kanit:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Press+Start+2P&family=SF+Pro+Display:wght@400;500;600;700&display=swap');
 
 /* ========================================================
    CUSTOM SPORTS FONT (Inter Miami 23-24)
@@ -367,6 +367,11 @@ body {
   font-weight: 700;
   fill: #ffffff;
   text-anchor: middle;
+}
+
+.jersey-number {
+  font-family: 'Press Start 2P', 'Chakra Petch', monospace;
+  font-weight: 400;
 }
 
 .number-style-clean {

@@ -35,7 +35,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261114-2">
+  <link rel="stylesheet" href="style.css?v=20261114-3">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -121,9 +121,10 @@
                   class="jersey-name">YOUR NAME</text>
 
                 <!-- Back Number (Solid Print - No Drop Shadow) -->
-                <text id="svgBackNumber" x="662" y="520" font-family="'JerseyMiami', sans-serif" font-weight="normal"
-                  font-size="220" letter-spacing="0.02em" text-anchor="middle" class="number-style-clean"
-                  dominant-baseline="central"></text>
+                <text id="svgBackNumber" x="662" y="520" font-family="'Press Start 2P', monospace"
+                  font-weight="normal" font-size="220" letter-spacing="0" text-anchor="middle"
+                  class="number-style-clean jersey-number" dominant-baseline="central" lengthAdjust="spacingAndGlyphs"
+                  textLength="300"></text>
               </svg>
             </div>
 
@@ -141,9 +142,10 @@
                   class="jersey-name">YOUR NAME</text>
 
                 <!-- Back number: back image occupies the left half -->
-                <text id="svgBothNumber" x="662" y="520" font-family="'JerseyMiami', sans-serif" font-weight="normal"
-                  font-size="220" letter-spacing="0.02em" text-anchor="middle" class="number-style-clean"
-                  dominant-baseline="central"></text>
+                <text id="svgBothNumber" x="662" y="520" font-family="'Press Start 2P', monospace"
+                  font-weight="normal" font-size="220" letter-spacing="0" text-anchor="middle"
+                  class="number-style-clean jersey-number" dominant-baseline="central" lengthAdjust="spacingAndGlyphs"
+                  textLength="300"></text>
               </svg>
             </div>
 
@@ -203,8 +205,8 @@
                 <label for="inputStudentNumber" class="text-xs font-semibold text-slate-700">
                   เลขที่ <span class="text-red-500">*</span>
                 </label>
-                <input type="text" id="inputStudentNumber" inputmode="numeric" pattern="[0-9]{1,3}"
-                  maxlength="3" placeholder="เช่น 08" required
+                <input type="text" id="inputStudentNumber" pattern="[0-9]{1,3}[ก-ฮ]?"
+                  maxlength="4" placeholder="เช่น 08, 8ก, 5ข" required
                   class="apple-glass-input w-full px-3.5 py-2.5 text-sm">
               </div>
               <div class="space-y-1.5">
@@ -753,7 +755,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261114-2"></script>
+  <script src="app.js?v=20261114-3"></script>
 </body>
 
 </html>

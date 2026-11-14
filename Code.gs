@@ -38,7 +38,7 @@ function doPost(e) {
     }
 
     var email = (data.email || "").toString().trim().toLowerCase();
-    var studentNumber = (data.studentNumber || data.studentNo || "").toString().trim();
+    var studentNumber = (data.studentNumber || data.studentNo || "").toString().replace(/\s+/g, "").trim();
     var room = (data.room || data.classRoom || "").toString().trim();
     var name = (data.name || "").toString().trim().toUpperCase();
     var number = (data.number || "").toString().trim();
@@ -55,8 +55,8 @@ function doPost(e) {
       });
     }
 
-    if (!/^\d{1,3}$/.test(studentNumber)) {
-      return createJsonResponse({ status: "error", message: "Student number must be 1-3 digits" });
+    if (!/^[0-9]{1,3}[ก-ฮ]?$/.test(studentNumber)) {
+      return createJsonResponse({ status: "error", message: "Student number must be 1-3 digits, with an optional Thai class suffix." });
     }
 
     if (ROOM_OPTIONS.indexOf(room) < 0) {
