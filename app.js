@@ -511,7 +511,8 @@ function initSlipUploadEvents() {
       }
 
       if (viewControls && originalControlsParent) {
-        if (dockMode === 'mobile') {
+        const shouldPlaceControlsInNavbar = isMobileViewport;
+        if (shouldPlaceControlsInNavbar) {
           if (navCard && viewControls.parentElement !== navCard) navCard.appendChild(viewControls);
           viewControls.classList.add('is-in-navbar');
           if (viewControlRow) viewControlRow.classList.add('is-empty');

@@ -359,10 +359,6 @@ body {
     opacity: 0;
   }
 
-  .apple-glass-nav.is-form-editing #jerseyViewControls.is-in-navbar {
-    display: none;
-  }
-
   #jerseyViewControlRow.is-empty {
     display: none !important;
   }
