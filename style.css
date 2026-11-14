@@ -106,6 +106,20 @@ body {
   border-radius: 20px;
 }
 
+.navbar-brand-logo {
+  display: block;
+  width: 56px;
+  height: 36px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  filter: brightness(0);
+  transition: transform 0.2s ease;
+}
+
+.group:hover .navbar-brand-logo {
+  transform: scale(1.04);
+}
+
 .apple-glass-card {
   background: var(--apple-glass-card);
   backdrop-filter: blur(32px) saturate(180%);
