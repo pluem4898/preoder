@@ -10,10 +10,20 @@ var SPREADSHEET_ID = "1WOI_8VSHi_6FIaifxPNuX7hTHEElSVKeR8InFHSQZLw";
 var SHEET_NAME = "Orders";
 var DRIVE_FOLDER_NAME = "Purple Jersey Slips 2026"; // โฟลเดอร์เก็บสลิป
 var ORDER_HEADERS = ["Timestamp", "Email", "Student No.", "Room", "Screen Name", "Screen Number", "Size", "Payment Slip", "Status"];
+var ROOM_OPTIONS = [
+  "ม.1/3", "ม.1/8", "ม.1/13",
+  "ม.2/2", "ม.2/7", "ม.2/12", "ม.2/17",
+  "ม.3/6", "ม.3/11", "ม.3/16",
+  "ม.4/1", "ม.4/5", "ม.4/10", "ม.4/15",
+  "ม.5/4", "ม.5/9", "ม.5/14",
+  "ม.6/1", "ม.6/12", "ม.6/13"
+];
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000);
+  if (!lock.tryLock(10000)) {
+    return createJsonResponse({ status: "error", message: "The sheet is busy. Please try again." });
+  }
 
   try {
     var sheet = getOrCreateSheet();
@@ -28,8 +38,8 @@ function doPost(e) {
     }
 
     var email = (data.email || "").toString().trim().toLowerCase();
-    var studentNumber = (data.studentNumber || "").toString().trim();
-    var room = (data.room || "").toString().trim();
+    var studentNumber = (data.studentNumber || data.studentNo || "").toString().trim();
+    var room = (data.room || data.classRoom || "").toString().trim();
     var name = (data.name || "").toString().trim().toUpperCase();
     var number = (data.number || "").toString().trim();
     var size = (data.size || "L").toString().trim().toUpperCase();
@@ -47,6 +57,10 @@ function doPost(e) {
 
     if (!/^\d{1,3}$/.test(studentNumber)) {
       return createJsonResponse({ status: "error", message: "Student number must be 1-3 digits" });
+    }
+
+    if (ROOM_OPTIONS.indexOf(room) < 0) {
+      return createJsonResponse({ status: "error", message: "Please select a valid classroom." });
     }
 
     var values = sheet.getDataRange().getValues();
@@ -356,6 +370,9 @@ function getOrCreateSheet() {
   sheet.setColumnWidth(columns["Size"], 80);
   sheet.setColumnWidth(columns["Payment Slip"], 150);
   sheet.setColumnWidth(columns["Status"], 140);
+
+  // Keep leading zeroes such as 08 in the student number column.
+  sheet.getRange(2, columns["Student No."], Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
   
   // Setup Data Validation for Status column.
   var statusColumn = sheet.getRange(2, columns["Status"], Math.max(sheet.getMaxRows() - 1, 1), 1);

@@ -5,13 +5,14 @@ const JERSEY_CONFIG = {
   // Back number calibrated for the Authong star jersey artwork.
   backNumber: {
     x: 662,
-    y: 470,
+    y: 520,
     size: 220
   },
 
-  // Back name sits below the small shoulder monogram.
+  // Back name is a straight line below the small shoulder monogram.
   backName: {
-    arcCurveY: 300,
+    x: 662,
+    y: 360,
     baseSize: 66
   }
 };
@@ -111,12 +112,10 @@ const DOM = {
   jerseyViewFrontEl: document.getElementById('jerseyViewFrontEl'),
   jerseyViewBothEl: document.getElementById('jerseyViewBothEl'),
 
-  // SVG Text & Paths
-  nameArcPath: document.getElementById('nameArcPath'),
-  svgCurvedNameText: document.getElementById('svgCurvedNameText'),
+  // SVG Text
+  svgBackName: document.getElementById('svgBackName'),
   svgBackNumber: document.getElementById('svgBackNumber'),
-  nameArcPathBoth: document.getElementById('nameArcPathBoth'),
-  svgCurvedNameBoth: document.getElementById('svgCurvedNameBoth'),
+  svgBothName: document.getElementById('svgBothName'),
   svgBothNumber: document.getElementById('svgBothNumber'),
 
   // View Switchers
@@ -213,8 +212,8 @@ function bindEvents() {
     e.target.value = val;
   });
 
-  DOM.inputRoom.addEventListener('input', (e) => {
-    AppState.room = e.target.value.trimStart();
+  DOM.inputRoom.addEventListener('change', (e) => {
+    AppState.room = e.target.value;
   });
 
   // Quick Tools
@@ -710,6 +709,11 @@ function calculateDynamicNameTypography(nameText, baseSize) {
   return { dynamicSize, letterSpacing };
 }
 
+function normalizeRoomValue(room) {
+  const value = String(room || '').trim();
+  return /^[1-6]\/\d{1,2}$/.test(value) ? `ม.${value}` : value;
+}
+
 function updateLivePreview() {
   const name = (AppState.screenName || '').toString().trim();
   const number = (AppState.screenNumber || '10').toString().trim();
@@ -718,39 +722,23 @@ function updateLivePreview() {
 
   const { backNumber, backName } = JERSEY_CONFIG;
 
-  // 1. Dynamic Curved Name Typography (Fewer characters = larger bold text)
+  // 1. Keep the name horizontal and scale it to fit the jersey.
   const { dynamicSize, letterSpacing } = calculateDynamicNameTypography(name, backName.baseSize);
 
-  const arcYEnd = 390;
-  if (DOM.nameArcPath) {
-    DOM.nameArcPath.setAttribute('d', `M 425 ${arcYEnd} Q 662 ${backName.arcCurveY} 899 ${arcYEnd}`);
-  }
-  if (DOM.nameArcPathBoth) {
-    DOM.nameArcPathBoth.setAttribute('d', `M 425 ${arcYEnd} Q 662 ${backName.arcCurveY} 899 ${arcYEnd}`);
-  }
+  const updateNameText = (element, fontSize) => {
+    if (!element) return;
+    element.textContent = displayName;
+    element.setAttribute('x', backName.x.toString());
+    element.setAttribute('y', backName.y.toString());
+    element.setAttribute('font-size', fontSize.toString());
+    element.setAttribute('letter-spacing', letterSpacing);
+    element.style.fontFamily = "'Chakra Petch', 'Kanit', sans-serif";
+    element.style.fontWeight = '700';
+    element.style.fill = '#ffffff';
+  };
 
-  // Name Text Content & Dynamic Font Size / Letter Spacing
-  if (DOM.svgCurvedNameText) {
-    DOM.svgCurvedNameText.textContent = displayName;
-    const parentText = DOM.svgCurvedNameText.parentElement;
-    if (parentText) {
-      parentText.setAttribute('font-size', dynamicSize.toString());
-      parentText.setAttribute('letter-spacing', letterSpacing);
-      parentText.style.fill = '#ffffff';
-      parentText.removeAttribute('filter');
-    }
-  }
-
-  if (DOM.svgCurvedNameBoth) {
-    DOM.svgCurvedNameBoth.textContent = displayName;
-    const parentTextBoth = DOM.svgCurvedNameBoth.parentElement;
-    if (parentTextBoth) {
-      parentTextBoth.setAttribute('font-size', Math.round(dynamicSize * 0.95).toString());
-      parentTextBoth.setAttribute('letter-spacing', letterSpacing);
-      parentTextBoth.style.fill = '#ffffff';
-      parentTextBoth.removeAttribute('filter');
-    }
-  }
+  updateNameText(DOM.svgBackName, dynamicSize);
+  updateNameText(DOM.svgBothName, Math.round(dynamicSize * 0.95));
 
   // Back number placement on the new jersey artwork.
   if (DOM.svgBackNumber) {
@@ -902,7 +890,7 @@ async function lookupEmailAndShowForm(email) {
         const gasRecord = {
           email: result.data.email || email,
           studentNumber: (result.data.studentNumber || '').toString(),
-          room: result.data.room || '',
+          room: normalizeRoomValue(result.data.room),
           name: result.data.name || '',
           number: (result.data.number || '10').toString(),
           size: result.data.size || 'L',
@@ -967,7 +955,7 @@ function switchToEditMode(record) {
   AppState.screenName = record.name || '';
   AppState.screenNumber = record.number || '10';
   AppState.studentNumber = (record.studentNumber || '').toString();
-  AppState.room = record.room || '';
+  AppState.room = normalizeRoomValue(record.room);
   AppState.size = record.size || 'L';
   AppState.orderStatus = record.status || 'รอชำระเงิน';
 
@@ -1175,6 +1163,11 @@ async function handleFormSubmit() {
     return;
   }
 
+  if (!AppState.gasUrl) {
+    showToast('ยังไม่ได้ตั้งค่า Google Apps Script URL', 'error');
+    return;
+  }
+
   AppState.studentNumber = studentNumber;
   AppState.room = room;
 
@@ -1214,27 +1207,42 @@ async function handleFormSubmit() {
   console.log('[SUBMIT] Final orderData.slipImage:', orderData.slipImage ? 'YES (base64)' : 'NO');
   console.log('[SUBMIT] Final orderData.slipUrl:', orderData.slipUrl || 'NO');
 
-  // Sync with Google Sheets (no local storage)
-  if (AppState.gasUrl) {
-    try {
-      await fetch(AppState.gasUrl, {
-        method: 'POST',
-        mode: 'no-cors', // Use no-cors mode for Google Apps Script
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderData)
-      });
-      
-      // Note: no-cors mode doesn't return readable response
-      // We'll assume success if no error is thrown
-      
-    } catch (err) {
-      console.warn('Google Sheets sync warning:', err);
-      showToast('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง', 'error');
-      AppState.isSubmitting = false;
-      DOM.btnSubmit.disabled = false;
-      DOM.btnSubmitText.textContent = AppState.mode === 'edit' ? 'บันทึกการแก้ไขข้อมูล' : 'ยืนยันการสั่งจองและส่งสลิป';
-      return;
+  // Send a CORS-safelisted text/plain JSON body, then verify the saved row with GAS GET.
+  try {
+    await fetch(AppState.gasUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify(orderData)
+    });
+
+    let verified = false;
+    for (let attempt = 0; attempt < 4 && !verified; attempt++) {
+      if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+
+      const verifyUrl = new URL(AppState.gasUrl);
+      verifyUrl.searchParams.set('action', 'search');
+      verifyUrl.searchParams.set('email', email);
+      verifyUrl.searchParams.set('_', Date.now().toString());
+      const verifyResponse = await fetch(verifyUrl.toString(), { cache: 'no-store' });
+      const verifyResult = await verifyResponse.json();
+      const saved = verifyResult && verifyResult.found && verifyResult.data;
+
+      verified = !!saved
+        && String(saved.studentNumber || '').trim() === studentNumber
+        && String(saved.room || '').trim() === room;
     }
+
+    if (!verified) {
+      throw new Error('Google Sheets did not confirm the student number and room.');
+    }
+  } catch (err) {
+    console.warn('Google Sheets sync warning:', err);
+    showToast('บันทึกไม่สำเร็จ กรุณาอัปเดต Apps Script แล้วลองใหม่', 'error');
+    AppState.isSubmitting = false;
+    DOM.btnSubmit.disabled = false;
+    DOM.btnSubmitText.textContent = AppState.mode === 'edit' ? 'บันทึกการแก้ไขข้อมูล' : 'ยืนยันการสั่งจองและส่งสลิป';
+    return;
   }
 
   AppState.isSubmitting = false;
