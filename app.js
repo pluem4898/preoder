@@ -410,6 +410,8 @@ function initSlipUploadEvents() {
   const viewControls = document.getElementById('jerseyViewControls');
   const viewControlRow = document.getElementById('jerseyViewControlRow');
   const originalControlsParent = viewControls ? viewControls.parentElement : null;
+  const originalJerseyParent = DOM.jerseyCardWrapper.parentElement;
+  const originalJerseyStage = DOM.jerseyCardWrapper.closest('.jersey-stage-container');
 
   const animateJerseyPosition = (fromRect) => {
     const toRect = DOM.jerseyCardWrapper.getBoundingClientRect();
@@ -448,12 +450,18 @@ function initSlipUploadEvents() {
         (previousMode === 'mobile' || dockMode === 'mobile');
       const fromRect = shouldAnimate ? DOM.jerseyCardWrapper.getBoundingClientRect() : null;
       const navCard = document.querySelector('.apple-glass-nav');
-      const jerseyStage = DOM.jerseyCardWrapper.closest('.jersey-stage-container');
+      const jerseyStage = originalJerseyStage;
 
       if (shouldAnimate) DOM.jerseyCardWrapper.classList.add('is-docking-animated');
       DOM.jerseyCardWrapper.classList.toggle('is-docked', shouldDock);
       if (navCard) navCard.classList.toggle('jersey-preview-expanded', dockMode === 'mobile');
       if (jerseyStage) jerseyStage.classList.toggle('is-preview-docked', isMobileViewport && shouldDock);
+
+      if (dockMode !== 'normal') {
+        if (navCard && DOM.jerseyCardWrapper.parentElement !== navCard) navCard.appendChild(DOM.jerseyCardWrapper);
+      } else if (DOM.jerseyCardWrapper.parentElement !== originalJerseyParent) {
+        originalJerseyParent.appendChild(DOM.jerseyCardWrapper);
+      }
 
       if (viewControls && originalControlsParent) {
         if (dockMode === 'mobile') {

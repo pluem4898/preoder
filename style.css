@@ -315,9 +315,9 @@ body {
 }
 
 .jersey-card-wrapper.is-docked {
-  position: fixed !important;
-  top: 25px !important;
-  right: max(36px, calc((100vw - 64rem) / 2 + 36px)) !important;
+  position: absolute !important;
+  top: 10px !important;
+  right: 12px !important;
   left: auto !important;
   width: 44px !important;
   max-width: 44px !important;
@@ -379,8 +379,8 @@ body {
   }
 
   .jersey-card-wrapper.is-docked {
-    position: fixed !important;
-    top: 84px !important;
+    position: absolute !important;
+    top: 64px !important;
     right: auto !important;
     left: calc(50% - min(98px, 27.5vw)) !important;
     transform: none;
