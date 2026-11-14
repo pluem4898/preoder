@@ -1057,14 +1057,10 @@ function resetToNewMode() {
   // Clear form fields
   AppState.screenName = '';
   AppState.screenNumber = '10';
-  AppState.studentNumber = '';
-  AppState.room = '';
   AppState.size = 'L';
   
   DOM.inputScreenName.value = '';
   DOM.inputScreenNumber.value = '10';
-  DOM.inputStudentNumber.value = '';
-  DOM.inputRoom.value = '';
   
   // Reset size buttons
   DOM.sizeBtns.forEach(btn => {

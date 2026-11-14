@@ -35,7 +35,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261114">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -208,10 +208,7 @@
             </p>
           </div>
 
-          <!-- 2. Form Content (Hidden until email is valid) -->
-          <div id="formContentSection" class="space-y-4 hidden">
-
-          <!-- 2.1 Student information -->
+          <!-- Student information remains visible before email lookup. -->
           <div class="space-y-2">
             <div>
               <h2 class="text-xs font-bold text-slate-800">ข้อมูลนักเรียน</h2>
@@ -236,7 +233,10 @@
             </div>
           </div>
 
-          <!-- 2.2 Personalization: Screen Name & Number -->
+          <!-- 2. Form Content (Hidden until email is valid) -->
+          <div id="formContentSection" class="space-y-4 hidden">
+
+          <!-- 2.1 Personalization: Screen Name & Number -->
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
 
             <!-- Name Input -->
@@ -735,7 +735,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js"></script>
+  <script src="app.js?v=20261114"></script>
 </body>
 
 </html>
