@@ -392,6 +392,10 @@ body {
     overflow: visible;
   }
 
+  .jersey-stage-container.is-form-editing {
+    display: none !important;
+  }
+
   .jersey-card-wrapper.is-docked {
     position: absolute !important;
     top: 64px !important;

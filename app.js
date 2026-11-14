@@ -502,7 +502,10 @@ function initSlipUploadEvents() {
         navCard.classList.toggle('jersey-preview-expanded', dockMode === 'mobile' && !isMobileFormEditing);
         navCard.classList.toggle('is-form-editing', isMobileViewport && isMobileFormEditing);
       }
-      if (jerseyStage) jerseyStage.classList.toggle('is-preview-docked', isMobileViewport && shouldDock);
+      if (jerseyStage) {
+        jerseyStage.classList.toggle('is-preview-docked', isMobileViewport && shouldDock);
+        jerseyStage.classList.toggle('is-form-editing', isMobileViewport && isMobileFormEditing);
+      }
 
       if (dockMode !== 'normal') {
         if (navCard && DOM.jerseyCardWrapper.parentElement !== navCard) navCard.appendChild(DOM.jerseyCardWrapper);
@@ -534,11 +537,34 @@ function initSlipUploadEvents() {
   window.addEventListener('resize', updateJerseyDock, { passive: true });
   const isEditableField = (element) => Boolean(element && element.matches &&
     element.matches('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select, [contenteditable="true"]'));
+  let focusedFieldRevealTimer = 0;
+  const revealFocusedField = (delay = 260) => {
+    window.clearTimeout(focusedFieldRevealTimer);
+    focusedFieldRevealTimer = window.setTimeout(() => {
+      const field = document.activeElement;
+      if (!isMobileFormEditing || !isEditableField(field) ||
+          !window.matchMedia('(max-width: 767px)').matches) return;
+
+      const visualViewport = window.visualViewport;
+      const viewportTop = visualViewport ? visualViewport.offsetTop : 0;
+      const viewportBottom = viewportTop + (visualViewport ? visualViewport.height : window.innerHeight);
+      const headerBottom = document.querySelector('.apple-glass-nav')?.getBoundingClientRect().bottom || 72;
+      const visibleTop = Math.max(viewportTop + 12, headerBottom + 12);
+      const visibleBottom = viewportBottom - 20;
+      const fieldRect = field.getBoundingClientRect();
+
+      if (fieldRect.top < visibleTop || fieldRect.bottom > visibleBottom) {
+        const targetScrollY = window.scrollY + fieldRect.top - visibleTop;
+        window.scrollTo({ top: Math.max(0, targetScrollY), behavior: 'auto' });
+      }
+    }, delay);
+  };
   document.addEventListener('focusin', (event) => {
     if (!isEditableField(event.target)) return;
     window.clearTimeout(formFocusReleaseTimer);
     isMobileFormEditing = true;
     updateJerseyDock();
+    revealFocusedField();
   });
   document.addEventListener('focusout', (event) => {
     if (!isEditableField(event.target)) return;
@@ -548,6 +574,12 @@ function initSlipUploadEvents() {
       updateJerseyDock();
     }, 450);
   });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (isMobileFormEditing) revealFocusedField(120);
+      updateJerseyDock();
+    }, { passive: true });
+  }
   updateJerseyDock();
 }
 
