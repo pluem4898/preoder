@@ -10,6 +10,7 @@ var SPREADSHEET_ID = "1WOI_8VSHi_6FIaifxPNuX7hTHEElSVKeR8InFHSQZLw";
 var SHEET_NAME = "Orders";
 var DRIVE_FOLDER_NAME = "Purple Jersey Slips 2026"; // โฟลเดอร์เก็บสลิป
 var ORDER_HEADERS = ["Timestamp", "Email", "Student No.", "Room", "Screen Name", "Screen Number", "Size", "Payment Slip", "Status"];
+var LOCKED_PAYMENT_STATUSES = ["ชำระเงินแล้ว", "ชำระเงินสำเร็จ", "ตรวจสอบแล้ว", "กำลังผลิต", "จัดส่งแล้ว", "เสร็จสิ้น"];
 var ROOM_OPTIONS = [
   "ม.1/3", "ม.1/8", "ม.1/13",
   "ม.2/2", "ม.2/7", "ม.2/12", "ม.2/17",
@@ -45,9 +46,7 @@ function doPost(e) {
     var name = (data.name || "").toString().trim().toUpperCase();
     var number = (data.number || "").toString().trim();
     var size = (data.size || "L").toString().trim().toUpperCase();
-    var slipImage = data.slipImage || "";
-    var slipUrl = data.slipUrl || ""; // URL ของรูปที่อัปโหลดไว้แล้ว
-    var status = data.status || (data.slipImage || data.slipUrl ? "รอตรวจสอบสลิป" : "รอชำระเงิน");
+    var slipImage = typeof data.slipImage === "string" ? data.slipImage : "";
     var timestamp = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
 
     if (!studentNumber || !room) {
@@ -114,6 +113,24 @@ function doPost(e) {
     var slipOwnerKey = email || existingEmail
       || ("room_" + room.replace(/^ม\./, "").replace(/\//g, "_") + "_no_" + studentNumber);
 
+    var status = foundRowIndex > 0
+      ? values[foundRowIndex - 1][columns["Status"] - 1] || "รอชำระเงิน"
+      : "รอชำระเงิน";
+    var slipFormula = "";
+    if (slipImage) {
+      if (LOCKED_PAYMENT_STATUSES.indexOf(status) !== -1) {
+        return createJsonResponse({ status: "error", message: "Payment has already been reviewed." });
+      }
+      var slipFileId = saveSlipToDrive(slipImage, slipOwnerKey);
+      if (!slipFileId) {
+        return createJsonResponse({ status: "error", message: "Unable to save the payment slip." });
+      }
+      var slipCode = normalizeSlipCode(data.slipCode) || generateSlipCode();
+      PropertiesService.getScriptProperties().setProperty(slipCodeProperty(slipFileId), slipCode);
+      slipFormula = '=HYPERLINK("' + slipDriveUrl(slipFileId) + '","เปิดสลิป")';
+      status = "รอตรวจสอบสลิป";
+    }
+
     if (foundRowIndex > 0) {
       // UPDATE existing row
       sheet.getRange(foundRowIndex, columns["Timestamp"]).setValue(timestamp);
@@ -126,32 +143,11 @@ function doPost(e) {
       screenNumberCell.setValue(number);
       sheet.getRange(foundRowIndex, columns["Size"]).setValue(size);
       
-      var slipCell = sheet.getRange(foundRowIndex, columns["Payment Slip"]);
-      var currentSlipValue = slipCell.getValue();
-      var currentSlipFormula = slipCell.getFormula();
-      
-      // กรณีที่ 1: มีรูปสลิป base64 ใหม่ = อัปโหลดใหม่
-      if (slipImage && slipImage.indexOf('data:image') === 0) {
-        var imageUrl = saveSlipToDrive(slipImage, slipOwnerKey);
-        if (imageUrl) {
-          slipCell.setFormula('=IMAGE("' + imageUrl + '", 4, 100, 100)');
-          sheet.setRowHeight(foundRowIndex, 110);
-        } else {
-          slipCell.setValue("✅ มีสลิป (บันทึกไม่สำเร็จ)");
-        }
-      } 
-      // กรณีที่ 2: ส่ง URL เดิมมา (ไม่ต้องอัปโหลดใหม่)
-      else if (slipUrl && slipUrl.length > 0 && slipUrl.indexOf('http') === 0) {
-        slipCell.setFormula('=IMAGE("' + slipUrl + '", 4, 100, 100)');
-        sheet.setRowHeight(foundRowIndex, 110);
+      if (slipFormula) {
+        sheet.getRange(foundRowIndex, columns["Payment Slip"]).setFormula(slipFormula);
       }
-      // กรณีที่ 3: ไม่ได้ส่งอะไรมา แต่ไม่มีรูปเดิม = ตั้งเป็นยังไม่แนบ
-      else if ((!slipImage || slipImage === "") && (!slipUrl || slipUrl === "") && !currentSlipFormula && currentSlipValue.indexOf('IMAGE') < 0) {
-        slipCell.setValue("⏳ ยังไม่แนบสลิป");
-      }
-      // กรณีอื่นๆ = เก็บค่าเดิมไว้ (ไม่ทำอะไร)
-      
       sheet.getRange(foundRowIndex, columns["Status"]).setValue(status);
+      SpreadsheetApp.flush();
 
       return createJsonResponse({
         status: "success",
@@ -165,29 +161,12 @@ function doPost(e) {
           name: name,
           number: number,
           size: size,
-          slipUrl: slipUrl || (slipImage ? "uploaded" : ""),
-          hasSlip: (slipImage || slipUrl) ? "มีสลิป" : "ยังไม่แนบ",
           status: status
         }
       });
 
     } else {
       // APPEND new row
-      var slipStatus = "⏳ ยังไม่แนบสลิป";
-      var slipFormula = "";
-      var imageUrl = null;
-      
-      if (slipImage && slipImage.indexOf('data:image') === 0) {
-        imageUrl = saveSlipToDrive(slipImage, slipOwnerKey);
-        if (imageUrl) {
-          slipFormula = '=IMAGE("' + imageUrl + '", 4, 100, 100)';
-        } else {
-          slipStatus = "✅ มีสลิป (บันทึกไม่สำเร็จ)";
-        }
-      } else if (slipImage && slipImage.length > 10) {
-        slipStatus = "✅ มีสลิปแนบแล้ว";
-      }
-      
       var newRow = new Array(sheet.getLastColumn()).fill("");
       newRow[columns["Timestamp"] - 1] = timestamp;
       newRow[columns["Email"] - 1] = email;
@@ -196,18 +175,13 @@ function doPost(e) {
       newRow[columns["Screen Name"] - 1] = name;
       newRow[columns["Screen Number"] - 1] = number;
       newRow[columns["Size"] - 1] = size;
-      newRow[columns["Payment Slip"] - 1] = slipFormula || slipStatus;
+      newRow[columns["Payment Slip"] - 1] = slipFormula || "⏳ ยังไม่แนบสลิป";
       newRow[columns["Status"] - 1] = status;
       
       var newRowIndex = sheet.getLastRow() + 1;
       sheet.getRange(newRowIndex, columns["Screen Number"]).setNumberFormat("@");
       sheet.getRange(newRowIndex, 1, 1, newRow.length).setValues([newRow]);
-      
-      // Set row height for image display
-      if (slipFormula) {
-        var lastRow = sheet.getLastRow();
-        sheet.setRowHeight(lastRow, 110);
-      }
+      SpreadsheetApp.flush();
 
       return createJsonResponse({
         status: "success",
@@ -220,8 +194,6 @@ function doPost(e) {
           name: name,
           number: number,
           size: size,
-          slipUrl: slipFormula ? imageUrl : "",
-          hasSlip: slipFormula ? "มีสลิป" : "ยังไม่แนบ",
           status: status
         }
       });
@@ -244,32 +216,21 @@ function doGet(e) {
     var email = (params.email || "").toString().trim().toLowerCase();
     var studentNumber = (params.studentNumber || params.studentNo || "").toString().replace(/\s+/g, "").trim();
     var room = (params.room || params.classRoom || "").toString().trim();
-    var fileId = params.fileId || "";
+    var slipCode = normalizeSlipCode(params.slipCode);
+    var isSlipRequest = action === "getSlip";
 
-    // NEW: Serve image from Drive as base64
-    if (action === "getImage" && fileId) {
-      try {
-        var file = DriveApp.getFileById(fileId);
-        var blob = file.getBlob();
-        var base64 = Utilities.base64Encode(blob.getBytes());
-        var mimeType = blob.getContentType();
-        
-        return createJsonResponse({
-          status: "success",
-          image: "data:" + mimeType + ";base64," + base64
-        });
-      } catch (driveErr) {
-        return createJsonResponse({
-          status: "error",
-          message: "Cannot access file: " + driveErr.toString()
-        });
-      }
+    if (action === "getImage") {
+      return createJsonResponse({ status: "error", code: "slip_code_required" });
+    }
+    if (isSlipRequest && (!studentNumber || !room || !slipCode)) {
+      return createJsonResponse({ status: "error", code: "slip_code_required" });
     }
 
     if (action === "ping") {
       return createJsonResponse({
         status: "ok",
         message: "Authong Athletics Official Store GAS Backend is active!",
+        slipViewVersion: 1,
         spreadsheetId: SPREADSHEET_ID,
         timestamp: new Date().toISOString()
       });
@@ -279,7 +240,7 @@ function doGet(e) {
     var columns = getColumnMap(sheet);
     var values = sheet.getDataRange().getValues();
 
-    if (action === "search" && (email || (studentNumber && room))) {
+    if (isSlipRequest || (action === "search" && (email || (studentNumber && room)))) {
       for (var i = 1; i < values.length; i++) {
         var rowEmail = (values[i][columns["Email"] - 1] || "").toString().trim().toLowerCase();
         var rowStudentNumber = (values[i][columns["Student No."] - 1] || "").toString();
@@ -288,17 +249,19 @@ function doGet(e) {
         var matchesStudent = studentNumber && room
           && normalizeStudentNumberKey(rowStudentNumber) === normalizeStudentNumberKey(studentNumber)
           && normalizeRoomKey(rowRoom) === normalizeRoomKey(room);
-        if (matchesEmail || matchesStudent) {
-          // Extract slipUrl from IMAGE formula if exists
-          var slipCellValue = values[i][columns["Payment Slip"] - 1] || "";
-          var slipUrl = "";
-          
-          if (slipCellValue.toString().indexOf('=IMAGE("') === 0) {
-            // Extract URL from =IMAGE("url", 4, 100, 100)
-            var matches = slipCellValue.toString().match(/=IMAGE\("([^"]+)"/);
-            if (matches && matches[1]) {
-              slipUrl = matches[1];
+        if (matchesStudent || (!isSlipRequest && matchesEmail)) {
+          var slipFormula = sheet.getRange(i + 1, columns["Payment Slip"]).getFormula();
+          var slip = getStoredSlip(slipFormula, values[i][columns["Payment Slip"] - 1]);
+          var storedCode = slip.fileId
+            ? normalizeSlipCode(PropertiesService.getScriptProperties().getProperty(slipCodeProperty(slip.fileId)))
+            : "";
+          var slipAvailable = Boolean(slip.fileId && storedCode);
+          var slipCodeMatches = Boolean(slipAvailable && slipCode && slipCode === storedCode);
+          if (isSlipRequest) {
+            if (!slipCodeMatches) {
+              return createJsonResponse({ status: "error", code: "invalid_slip_code" });
             }
+            return getStoredSlipImage(slip.fileId);
           }
           
           return createJsonResponse({
@@ -311,14 +274,18 @@ function doGet(e) {
               name: values[i][columns["Screen Name"] - 1],
               number: (values[i][columns["Screen Number"] - 1] || "").toString(),
               size: values[i][columns["Size"] - 1] || "L",
-              hasSlip: slipUrl ? "มีสลิป" : (slipCellValue.toString().indexOf('✅') >= 0 ? "มีสลิป" : "ยังไม่แนบสลิป"),
-              slipUrl: slipUrl,
+              hasSlip: slip.exists,
+              slipAvailable: slipAvailable,
+              slipCodeMatches: slipCodeMatches,
               status: values[i][columns["Status"] - 1] || ""
             }
           });
         }
       }
 
+      if (isSlipRequest) {
+        return createJsonResponse({ status: "error", code: "invalid_slip_code" });
+      }
       return createJsonResponse({
         status: "success",
         found: false,
@@ -328,6 +295,9 @@ function doGet(e) {
 
     if (action === "list") {
       var orders = [];
+      var slipFormulas = values.length > 1
+        ? sheet.getRange(2, columns["Payment Slip"], values.length - 1, 1).getFormulas()
+        : [];
       for (var j = 1; j < values.length; j++) {
         if (values[j][columns["Student No."] - 1] || values[j][columns["Email"] - 1]) {
           orders.push({
@@ -337,7 +307,7 @@ function doGet(e) {
             name: values[j][columns["Screen Name"] - 1],
             number: values[j][columns["Screen Number"] - 1],
             size: values[j][columns["Size"] - 1] || "L",
-            hasSlip: values[j][columns["Payment Slip"] - 1] || "",
+            hasSlip: getStoredSlip(slipFormulas[j - 1][0], values[j][columns["Payment Slip"] - 1]).exists,
             status: values[j][columns["Status"] - 1] || ""
           });
         }
@@ -356,11 +326,116 @@ function doGet(e) {
     });
 
   } catch (error) {
+    if (isSlipRequest) return createJsonResponse({ status: "error", code: "slip_unavailable" });
     return createJsonResponse({
       status: "error",
       message: error.toString()
     });
   }
+}
+
+function getStoredSlip(formula, cellValue) {
+  var formulaUrl = /^=\s*(?:IMAGE|HYPERLINK)\s*\(\s*"([^"]+)"/i.exec(formula);
+  var url = formulaUrl ? formulaUrl[1] : typeof cellValue === "string" ? cellValue.trim() : "";
+  var fileId = "";
+  if (/^https:\/\/drive\.google\.com\//i.test(url)) {
+    var match = /\/file\/d\/([\w-]{10,})(?=[/?#]|$)/.exec(url) || /[?&]id=([\w-]{10,})(?=[&#]|$)/.exec(url);
+    if (match) fileId = match[1];
+  }
+  var isImage = /^=\s*IMAGE\s*\(/i.test(formula) ||
+    Boolean(cellValue && typeof cellValue.getContentUrl === "function");
+  return { fileId: fileId, exists: Boolean(fileId || isImage) };
+}
+
+function getStoredSlipImage(fileId) {
+  try {
+    var file = DriveApp.getFileById(fileId);
+    if (!file.isTrashed()) {
+      var parents = file.getParents();
+      while (parents.hasNext()) {
+        if (parents.next().getName() !== DRIVE_FOLDER_NAME) continue;
+        var blob = file.getBlob();
+        var mime = blob.getContentType();
+        if (/^image\/(?:jpeg|png|webp|gif)$/i.test(mime)) {
+          return createJsonResponse({
+            status: "success",
+            image: "data:" + mime + ";base64," + Utilities.base64Encode(blob.getBytes())
+          });
+        }
+        break;
+      }
+    }
+  } catch (error) {
+    Logger.log("Unable to load a stored payment slip.");
+  }
+  return createJsonResponse({ status: "error", code: "slip_unavailable" });
+}
+
+function normalizeSlipCode(value) {
+  var code = String(value || "").trim().toLowerCase();
+  return /^[0-9a-f]{32}$/.test(code) ? code : "";
+}
+
+function generateSlipCode() {
+  return Utilities.getUuid().replace(/-/g, "").toLowerCase();
+}
+
+function slipCodeProperty(fileId) {
+  return "SLIP_VIEW_CODE_" + fileId;
+}
+
+function slipDriveUrl(fileId) {
+  return "https://drive.google.com/file/d/" + fileId + "/view";
+}
+
+// Run from the Apps Script editor after deploying this version.
+// This creates a separate private report. Share each code only with the order's owner.
+function prepareExistingSlipCodes() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  var reportRows = [["เลขที่", "ห้อง", "รหัสเปิดสลิป", "ลิงก์ Drive สำหรับผู้ดูแล"]];
+  var added = {};
+  try {
+    var sheet = getOrCreateSheet();
+    var columns = getColumnMap(sheet);
+    var rowCount = sheet.getLastRow() - 1;
+    if (rowCount < 1) return;
+    var slipRange = sheet.getRange(2, columns["Payment Slip"], rowCount, 1);
+    var formulas = slipRange.getFormulas();
+    var orders = sheet.getDataRange().getValues();
+    var properties = PropertiesService.getScriptProperties();
+    var existing = properties.getProperties();
+    for (var i = 0; i < rowCount; i++) {
+      var order = orders[i + 1];
+      var student = String(order[columns["Student No."] - 1] || "");
+      var room = String(order[columns["Room"] - 1] || "");
+      var slip = getStoredSlip(formulas[i][0], order[columns["Payment Slip"] - 1]);
+      if (!student || !room || !slip.fileId) continue;
+      var key = slipCodeProperty(slip.fileId);
+      var code = normalizeSlipCode(existing[key]) || added[key];
+      if (!code) code = added[key] = generateSlipCode();
+      reportRows.push([student, room, code, slipDriveUrl(slip.fileId)]);
+    }
+    if (Object.keys(added).length) properties.setProperties(added);
+  } finally {
+    lock.releaseLock();
+  }
+
+  if (reportRows.length < 2) {
+    Logger.log("No saved slip links were found.");
+    return;
+  }
+  var report = SpreadsheetApp.create("Authong - รหัสเปิดสลิป (ส่วนตัว)", reportRows.length, 4);
+  if (DriveApp.getFileById(report.getId()).getSharingAccess() !== DriveApp.Access.PRIVATE) {
+    throw new Error("The slip code report must be restricted before writing codes.");
+  }
+  var tab = report.getSheets()[0];
+  tab.getRange(1, 1, reportRows.length, 4).setNumberFormat("@").setValues(reportRows);
+  tab.setFrozenRows(1);
+  tab.setColumnWidth(3, 290);
+  tab.setColumnWidth(4, 440);
+  Logger.log("ไฟล์รหัสเปิดสลิปส่วนตัว: " + report.getUrl());
+  return report.getUrl();
 }
 
 function getOrCreateSheet() {
@@ -477,74 +552,21 @@ function createJsonResponse(data) {
  * บันทึกรูปสลิป (Base64) ลง Google Drive
  * @param {string} base64Data - Base64 encoded image (data:image/jpeg;base64,...)
  * @param {string} ownerKey - Student or email key for naming the uploaded file
- * @return {string} URL ของรูปภาพที่บันทึกแล้ว หรือ null ถ้าไม่สำเร็จ
+ * @return {string|null} รหัสไฟล์ใน Drive หรือ null ถ้าบันทึกไม่สำเร็จ
  */
 function saveSlipToDrive(base64Data, ownerKey) {
   try {
     ownerKey = (ownerKey || "student").toString().trim();
-    // แยก metadata และ base64 data
-    var contentType = base64Data.split(',')[0].split(':')[1].split(';')[0];
-    var base64String = base64Data.split(',')[1];
-    
-    // Decode base64 to binary
-    var decoded = Utilities.base64Decode(base64String);
-    
-    // สร้างชื่อไฟล์ที่ไม่ซ้ำ
-    var timestamp = new Date().getTime();
-    var fileName = 'slip_' + ownerKey.replace(/[^a-zA-Z0-9]/g, '_') + '_' + timestamp + '.jpg';
-    
-    // สร้าง Blob
-    var blob = Utilities.newBlob(decoded, contentType, fileName);
-    
-    // หาหรือสร้างโฟลเดอร์สำหรับเก็บสลิป
-    var folder = getOrCreateFolder();
-    
-    // ลบไฟล์เก่าของเจ้าของรายการเดียวกัน (ถ้ามี)
-    deleteOldSlips(ownerKey, folder);
-    
-    // สร้างไฟล์ใหม่
-    var file = folder.createFile(blob);
-    
-    // ตั้งค่าให้ทุกคนที่มี link ดูได้
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    
-    // คืนค่า URL สำหรับแสดงรูปใน Sheets
-    return 'https://drive.google.com/uc?export=view&id=' + file.getId();
-    
+    var image = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+=*)$/i.exec(base64Data);
+    if (!image) return null;
+    var extension = image[1].split("/")[1].toLowerCase();
+    var fileName = "slip_" + ownerKey.replace(/[^a-zA-Z0-9]/g, "_") + "_" + Utilities.getUuid() + "." + extension;
+    var blob = Utilities.newBlob(Utilities.base64Decode(image[2]), image[1], fileName);
+    var file = getOrCreateFolder().createFile(blob);
+    return file.getId();
   } catch (error) {
     Logger.log('Error saving slip to Drive: ' + error.toString());
     return null;
-  }
-}
-
-/**
- * ลบไฟล์สลิปเก่าของ owner key นี้ (ถ้ามี)
- */
-function deleteOldSlips(ownerKey, folder) {
-  try {
-    var searchPattern = 'slip_' + ownerKey.replace(/[^a-zA-Z0-9]/g, '_');
-    var files = folder.getFilesByName(searchPattern);
-    
-    // ถ้าไม่เจอด้วยชื่อแน่นอน ให้ลองหาทุกไฟล์ที่เริ่มต้นด้วย pattern
-    if (!files.hasNext()) {
-      var allFiles = folder.getFiles();
-      while (allFiles.hasNext()) {
-        var file = allFiles.next();
-        if (file.getName().indexOf(searchPattern) === 0) {
-          Logger.log('Deleting old slip: ' + file.getName());
-          file.setTrashed(true);
-        }
-      }
-    } else {
-      // ลบไฟล์ที่เจอ
-      while (files.hasNext()) {
-        var file = files.next();
-        Logger.log('Deleting old slip: ' + file.getName());
-        file.setTrashed(true);
-      }
-    }
-  } catch (error) {
-    Logger.log('Error deleting old slips: ' + error.toString());
   }
 }
 
@@ -553,15 +575,16 @@ function deleteOldSlips(ownerKey, folder) {
  */
 function getOrCreateFolder() {
   var folders = DriveApp.getFoldersByName(DRIVE_FOLDER_NAME);
-  
-  if (folders.hasNext()) {
-    return folders.next();
-  } else {
-    // สร้างโฟลเดอร์ใหม่
-    var folder = DriveApp.createFolder(DRIVE_FOLDER_NAME);
-    folder.setDescription('โฟลเดอร์เก็บสลิปการโอนเงินจากระบบจองเสื้อทีมสีม่วง 2026');
-    return folder;
+  while (folders.hasNext()) {
+    var existing = folders.next();
+    if (existing.getSharingAccess() === DriveApp.Access.PRIVATE) return existing;
   }
+  var folder = DriveApp.createFolder(DRIVE_FOLDER_NAME);
+  if (folder.getSharingAccess() !== DriveApp.Access.PRIVATE) {
+    throw new Error("The slip folder must be restricted.");
+  }
+  folder.setDescription('โฟลเดอร์เก็บสลิปการโอนเงินจากระบบจองเสื้อทีมสีม่วง 2026');
+  return folder;
 }
 
 /**
@@ -570,7 +593,7 @@ function getOrCreateFolder() {
 function testSaveSlip() {
   // ตัวอย่าง base64 ขนาดเล็กสำหรับทดสอบ (1x1 pixel red PNG)
   var testData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
-  var url = saveSlipToDrive(testData, 'test@example.com');
-  Logger.log('Test slip URL: ' + url);
+  var fileId = saveSlipToDrive(testData, 'test@example.com');
+  Logger.log('Test slip URL: ' + (fileId ? slipDriveUrl(fileId) : 'upload failed'));
   return url;
 }

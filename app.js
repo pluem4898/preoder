@@ -34,8 +34,8 @@ const AppState = {
   slipImage: null, // Base64 data URL
   slipFileName: '',
   slipUploadedAt: null,
-  slipUrl: null, // URL of uploaded slip on Drive
-  slipChanged: false, // Track if slip was changed during edit mode
+  slipChanged: false,
+  newSlipCode: '',
   isSubmitting: false,
   gasUrl: (typeof CONFIG !== 'undefined' && CONFIG.gasUrl) 
     ? CONFIG.gasUrl 
@@ -98,8 +98,16 @@ const DOM = {
   qrAccountName: document.getElementById('qrAccountName'),
   qrAccountNumber: document.getElementById('qrAccountNumber'),
   copyAccountStatus: document.getElementById('copyAccountStatus'),
+  paymentAccountInfo: document.getElementById('paymentAccountInfo'),
+  paymentCompleteInfo: document.getElementById('paymentCompleteInfo'),
   slipDropzone: document.getElementById('slipDropzone'),
   inputSlipFile: document.getElementById('inputSlipFile'),
+  savedSlipCard: document.getElementById('savedSlipCard'),
+  savedSlipForm: document.getElementById('savedSlipForm'),
+  savedSlipMessage: document.getElementById('savedSlipMessage'),
+  inputSlipCode: document.getElementById('inputSlipCode'),
+  btnOpenSavedSlip: document.getElementById('btnOpenSavedSlip'),
+  btnReplaceSavedSlip: document.getElementById('btnReplaceSavedSlip'),
   slipPreviewCard: document.getElementById('slipPreviewCard'),
   slipThumbnailImg: document.getElementById('slipThumbnailImg'),
   slipStatusBadge: document.getElementById('slipStatusBadge'),
@@ -296,7 +304,7 @@ function bindEvents() {
       console.log('Status changed to:', AppState.orderStatus);
       
       // Disable slip upload if status is "ชำระเงินแล้ว" or later
-      updateSlipUploadAccess();
+      renderSlipPreview();
     });
   });
 
@@ -375,6 +383,12 @@ function bindEvents() {
 // ==========================================
 // 5. SLIP UPLOAD & PROCESSING
 // ==========================================
+const LOCKED_PAYMENT_STATUSES = new Set(['ชำระเงินแล้ว', 'ชำระเงินสำเร็จ', 'ตรวจสอบแล้ว', 'กำลังผลิต', 'จัดส่งแล้ว', 'เสร็จสิ้น']);
+const SLIP_CODE_PATTERN = /^[0-9a-f]{32}$/;
+let savedSlipRequest = null;
+let slipSelection = 0;
+let isPreparingSlip = false;
+
 function initSlipUploadEvents() {
   // File Input Change
   if (DOM.inputSlipFile) {
@@ -411,20 +425,18 @@ function initSlipUploadEvents() {
     });
   }
 
-  // Slip Action Buttons
-  if (DOM.btnChangeSlip) {
-    DOM.btnChangeSlip.addEventListener('click', () => {
-      DOM.inputSlipFile.click();
-    });
-  }
+  const chooseSlip = () => DOM.inputSlipFile.click();
+  DOM.btnChangeSlip.addEventListener('click', chooseSlip);
+  DOM.btnReplaceSavedSlip.addEventListener('click', chooseSlip);
+  DOM.savedSlipForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    loadSavedSlip(DOM.inputSlipCode.value.trim().toLowerCase());
+  });
 
   if (DOM.btnRemoveSlip) {
     DOM.btnRemoveSlip.addEventListener('click', () => {
-      AppState.slipImage = null;
-      AppState.slipFileName = '';
-      AppState.slipUploadedAt = null;
-      renderSlipPreview();
-      showToast('ลบไฟล์สลิปแล้ว', 'info');
+      restoreSavedSlip();
+      showToast('ยกเลิกการแนบรูปใหม่แล้ว', 'info');
     });
   }
 
@@ -623,7 +635,8 @@ function initPaymentQrEvents() {
   });
 }
 
-function processSlipFile(file) {
+async function processSlipFile(file) {
+  if (AppState.isSubmitting || LOCKED_PAYMENT_STATUSES.has(AppState.orderStatus)) return;
   if (!file || !file.type.startsWith('image/')) {
     showToast('กรุณาเลือกไฟล์รูปภาพเท่านั้น (JPG, PNG, WEBP)', 'error');
     return;
@@ -636,120 +649,47 @@ function processSlipFile(file) {
 
   showToast('กำลังประมวลผลรูปภาพสลิป...', 'info');
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const rawDataUrl = e.target.result;
-    compressSlipImage(rawDataUrl, (compressedDataUrl) => {
-      AppState.slipImage = compressedDataUrl;
-      AppState.slipFileName = file.name;
-      AppState.slipUploadedAt = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-      AppState.slipChanged = true; // Mark that slip was changed
-      renderSlipPreview();
-      showToast('แนบสลิปเรียบร้อยแล้ว!', 'success');
-    });
-  };
-  reader.readAsDataURL(file);
+  cancelSavedSlipLoad();
+  const selection = ++slipSelection;
+  isPreparingSlip = true;
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = await compressSlipImage(imageUrl);
+    if (selection !== slipSelection) return;
+    AppState.slipImage = image;
+    AppState.slipFileName = file.name;
+    AppState.slipUploadedAt = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    AppState.slipChanged = true;
+    AppState.newSlipCode = Array.from(crypto.getRandomValues(new Uint8Array(16)),
+      byte => byte.toString(16).padStart(2, '0')).join('');
+    renderSlipPreview();
+    showToast('เลือกสลิปแล้ว กดบันทึกเพื่อส่ง', 'success');
+  } catch {
+    if (selection === slipSelection) showToast('เปิดรูปสลิปไม่ได้ กรุณาเลือกไฟล์รูปอื่น', 'error');
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+    if (selection === slipSelection) {
+      isPreparingSlip = false;
+      DOM.inputSlipFile.value = '';
+    }
+  }
 }
 
-function compressSlipImage(dataUrl, callback) {
+async function compressSlipImage(imageUrl) {
   const img = new Image();
-  img.onload = () => {
-    const maxWidth = 900;
-    const maxHeight = 1200;
-    let width = img.width;
-    let height = img.height;
-
-    if (width > maxWidth || height > maxHeight) {
-      if (width / height > maxWidth / maxHeight) {
-        height = Math.round((height * maxWidth) / width);
-        width = maxWidth;
-      } else {
-        width = Math.round((width * maxHeight) / height);
-        height = maxHeight;
-      }
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, width, height);
-
-    const compressed = canvas.toDataURL('image/jpeg', 0.85);
-    callback(compressed);
-  };
-  img.src = dataUrl;
+  img.src = imageUrl;
+  await img.decode();
+  const scale = Math.min(1, 900 / img.naturalWidth, 1200 / img.naturalHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85);
 }
 
 // ==========================================
 // ORDER STATUS DISPLAY (READ-ONLY from Sheets)
 // ==========================================
-function updateSlipUploadAccess() {
-  const lockedStatuses = ['ชำระเงินแล้ว', 'กำลังผลิต', 'จัดส่งแล้ว', 'เสร็จสิ้น'];
-  const isLocked = lockedStatuses.includes(AppState.orderStatus);
-  
-  // สถานะ "ยกเลิก" ไม่ล็อค - อนุญาตให้อัปโหลดสลิปใหม่ได้
-  
-  const slipSection = document.getElementById('slipUploadSection');
-  
-  console.log('[SLIP ACCESS] Status:', AppState.orderStatus);
-  console.log('[SLIP ACCESS] Has slip:', !!AppState.slipUrl || !!AppState.slipImage);
-  console.log('[SLIP ACCESS] isLocked:', isLocked);
-  console.log('[SLIP ACCESS] slipSection found:', !!slipSection);
-  
-  if (isLocked) {
-    // Hide entire slip upload section using inline style
-    if (slipSection) {
-      slipSection.style.display = 'none';
-      console.log('[SLIP ACCESS] Section hidden with display:none');
-    } else {
-      console.error('[SLIP ACCESS] slipUploadSection element not found!');
-    }
-    
-    // Show informational message instead
-    let infoMessage = document.getElementById('paymentCompleteInfo');
-    if (!infoMessage) {
-      infoMessage = document.createElement('div');
-      infoMessage.id = 'paymentCompleteInfo';
-      infoMessage.className = 'p-4 rounded-2xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-sm mt-3';
-      infoMessage.innerHTML = `
-        <div class="flex items-start gap-3">
-          <div class="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0">
-            <i class="fa-solid fa-circle-check text-lg"></i>
-          </div>
-          <div>
-            <p class="font-bold text-green-800 mb-1">ชำระเงินเรียบร้อยแล้ว</p>
-            <p class="text-xs text-green-700">รอรับของได้เลย หากจะแก้ข้อมูล ชื่อ หมายเลข หรือ ไซส์ ก็แก้ไปเลย</p>
-          </div>
-        </div>
-      `;
-      // Insert after the slip section
-      if (slipSection && slipSection.parentNode) {
-        slipSection.parentNode.insertBefore(infoMessage, slipSection.nextSibling);
-        console.log('[SLIP ACCESS] Info message created');
-      }
-    } else {
-      infoMessage.style.display = 'block';
-      console.log('[SLIP ACCESS] Info message shown');
-    }
-    
-    console.log('[SLIP ACCESS] Slip upload LOCKED');
-  } else {
-    // Show slip upload section
-    if (slipSection) {
-      slipSection.style.display = '';
-      console.log('[SLIP ACCESS] Section shown');
-    }
-    
-    const infoMessage = document.getElementById('paymentCompleteInfo');
-    if (infoMessage) {
-      infoMessage.style.display = 'none';
-      console.log('[SLIP ACCESS] Info message hidden');
-    }
-    
-    console.log('[SLIP ACCESS] Slip upload UNLOCKED');
-  }
-}
 
 function renderOrderStatus(statusText) {
   console.log('[RENDER STATUS] Called with:', statusText);
@@ -774,69 +714,139 @@ function renderOrderStatus(statusText) {
   
   // Update slip upload access based on status
   AppState.orderStatus = statusText;
-  updateSlipUploadAccess();
+  renderSlipPreview();
 }
 
 // ==========================================
 // SLIP PREVIEW & UPLOAD
 // ==========================================
 function renderSlipPreview() {
-  console.log('[SLIP RENDER] Called with AppState.slipImage:', AppState.slipImage);
-  
-  if (AppState.slipImage) {
-    if (DOM.slipDropzone) DOM.slipDropzone.classList.add('hidden');
-    if (DOM.slipPreviewCard) DOM.slipPreviewCard.classList.remove('hidden');
-    
-    // Check if slipImage is a URL (from Drive) or base64
-    const isUrl = AppState.slipImage.indexOf('http') === 0;
-    console.log('[SLIP RENDER] Is URL:', isUrl);
-    
-    // Convert Drive URL to embeddable format if needed
-    let imageUrl = AppState.slipImage;
-    if (isUrl && imageUrl.indexOf('drive.google.com') > 0) {
-      // Extract file ID and convert to thumbnail URL
-      const fileIdMatch = imageUrl.match(/[?&]id=([^&]+)/);
-      console.log('[SLIP RENDER] File ID match:', fileIdMatch);
-      if (fileIdMatch && fileIdMatch[1]) {
-        imageUrl = `https://drive.google.com/thumbnail?id=${fileIdMatch[1]}&sz=w1000`;
-        console.log('[SLIP RENDER] Converted to thumbnail URL:', imageUrl);
-      }
-    }
-    
-    if (DOM.slipThumbnailImg) {
-      console.log('[SLIP RENDER] Setting thumbnail src to:', imageUrl);
-      DOM.slipThumbnailImg.src = imageUrl;
-    }
-    if (DOM.slipFullImg) {
-      DOM.slipFullImg.src = imageUrl;
-    }
-    if (DOM.slipFileName) DOM.slipFileName.textContent = AppState.slipFileName || 'slip_payment.jpg';
-    if (DOM.slipUploadTime) DOM.slipUploadTime.textContent = AppState.slipUploadedAt ? `อัปโหลดเมื่อ ${AppState.slipUploadedAt}` : 'มีสลิปในระบบ';
+  const record = AppState.existingRecord;
+  const locked = LOCKED_PAYMENT_STATUSES.has(AppState.orderStatus);
+  const hasPreview = Boolean(AppState.slipImage);
+  const hasSavedSlip = Boolean(record?.hasSlip);
+  DOM.orderStatusBadge.textContent = AppState.orderStatus;
+  DOM.paymentAccountInfo.classList.toggle('hidden', locked);
+  DOM.paymentCompleteInfo.classList.toggle('hidden', !locked);
+  DOM.slipDropzone.classList.toggle('hidden', locked || hasPreview || hasSavedSlip);
+  DOM.savedSlipCard.classList.toggle('hidden', hasPreview || !hasSavedSlip);
+  DOM.savedSlipForm.classList.toggle('hidden', !record?.slipAvailable);
+  DOM.btnReplaceSavedSlip.classList.toggle('hidden', locked);
+  DOM.slipPreviewCard.classList.toggle('hidden', !hasPreview);
+  DOM.btnChangeSlip.classList.toggle('hidden', locked);
+  DOM.btnRemoveSlip.classList.toggle('hidden', locked || !AppState.slipChanged);
 
-    // Add error handler for image loading
-    if (DOM.slipThumbnailImg) {
-      DOM.slipThumbnailImg.onerror = function() {
-        console.log('Failed to load thumbnail, trying original URL');
-        this.src = AppState.slipImage; // Fallback to original URL
-      };
-    }
-
-    if (DOM.slipStatusBadge) {
-      console.log('[SLIP STATUS] Mode:', AppState.mode, 'isUrl:', isUrl);
-      if (AppState.mode === 'edit' && isUrl) {
-        DOM.slipStatusBadge.className = 'text-[10px] font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md inline-block mb-0.5';
-        DOM.slipStatusBadge.innerHTML = '<i class="fa-solid fa-receipt mr-1"></i>สลิปเดิมที่เคยแนบไว้';
-      } else {
-        DOM.slipStatusBadge.className = 'text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md inline-block mb-0.5';
-        DOM.slipStatusBadge.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i>แนบสลิปเรียบร้อยแล้ว';
-      }
-    }
+  if (hasPreview) {
+    DOM.slipThumbnailImg.src = AppState.slipImage;
+    DOM.slipFileName.textContent = AppState.slipFileName || 'สลิปการโอนเงิน';
+    DOM.slipUploadTime.textContent = AppState.slipUploadedAt ? 'เลือกเมื่อ ' + AppState.slipUploadedAt : '';
+    DOM.slipStatusBadge.textContent = AppState.slipChanged ? 'พร้อมส่งเมื่อบันทึก' : 'สลิปที่บันทึกไว้';
   } else {
-    if (DOM.slipDropzone) DOM.slipDropzone.classList.remove('hidden');
-    if (DOM.slipPreviewCard) DOM.slipPreviewCard.classList.add('hidden');
-    if (DOM.slipThumbnailImg) DOM.slipThumbnailImg.src = '';
-    if (DOM.slipFullImg) DOM.slipFullImg.src = '';
-    if (DOM.inputSlipFile) DOM.inputSlipFile.value = '';
+    DOM.slipThumbnailImg.removeAttribute('src');
+    DOM.slipFullImg.removeAttribute('src');
+    DOM.modalSlipLightbox.classList.add('hidden');
+  }
+}
+
+function getSlipSummary(data) {
+  return {
+    hasSlip: data.hasSlip === true || data.hasSlip === 'มีสลิป' || Boolean(data.slipUrl),
+    slipAvailable: data.slipAvailable === true
+  };
+}
+
+function slipCodeStorageKey(studentNumber, room) {
+  const student = String(studentNumber).replace(/\s+/g, '').replace(/^0+(?=\d)/, '');
+  return 'AUTHONG_SLIP_CODE:' + JSON.stringify([AppState.gasUrl, normalizeRoomValue(room), student]);
+}
+
+function readSlipCode(studentNumber, room) {
+  try {
+    return localStorage.getItem(slipCodeStorageKey(studentNumber, room)) || '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberSlipCode(studentNumber, room, code) {
+  try {
+    localStorage.setItem(slipCodeStorageKey(studentNumber, room), code);
+  } catch {
+    // The code can still be entered again in browsers that block local storage.
+  }
+}
+
+function cancelSavedSlipLoad() {
+  savedSlipRequest?.abort();
+  savedSlipRequest = null;
+  DOM.btnOpenSavedSlip.disabled = false;
+}
+
+function restoreSavedSlip() {
+  cancelSavedSlipLoad();
+  slipSelection++;
+  isPreparingSlip = false;
+  AppState.slipChanged = false;
+  AppState.newSlipCode = '';
+  AppState.slipImage = null;
+  AppState.slipFileName = '';
+  AppState.slipUploadedAt = null;
+  DOM.inputSlipFile.value = '';
+  DOM.inputSlipCode.value = '';
+  const record = AppState.existingRecord;
+  DOM.savedSlipMessage.textContent = record?.hasSlip && !record.slipAvailable
+    ? 'ติดต่อผู้ดูแลเพื่อขอรหัสหรือให้ตรวจรูปสลิปเดิม'
+    : '';
+  renderSlipPreview();
+  if (record?.slipAvailable) {
+    const code = readSlipCode(record.studentNumber, record.room);
+    if (code) loadSavedSlip(code);
+  }
+}
+
+async function loadSavedSlip(code) {
+  const record = AppState.existingRecord;
+  if (!record?.slipAvailable || AppState.slipChanged || isPreparingSlip) return;
+  if (!SLIP_CODE_PATTERN.test(code)) {
+    DOM.savedSlipMessage.textContent = 'กรุณากรอกรหัสเปิดสลิป 32 ตัวจากผู้ดูแล';
+    return;
+  }
+
+  cancelSavedSlipLoad();
+  const request = new AbortController();
+  savedSlipRequest = request;
+  DOM.btnOpenSavedSlip.disabled = true;
+  DOM.savedSlipMessage.textContent = 'กำลังโหลดรูปสลิป…';
+  try {
+    const url = new URL(AppState.gasUrl);
+    url.searchParams.set('action', 'getSlip');
+    url.searchParams.set('studentNumber', record.studentNumber);
+    url.searchParams.set('room', record.room);
+    url.searchParams.set('slipCode', code);
+    const response = await fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer', signal: request.signal });
+    const result = await response.json();
+    if (savedSlipRequest !== request || AppState.existingRecord !== record) return;
+    if (result.status !== 'success' || !/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(result.image)) {
+      DOM.savedSlipMessage.textContent = result.code === 'invalid_slip_code'
+        ? 'รหัสนี้ไม่ตรงกับสลิปของรายการ กรุณาตรวจรหัสอีกครั้ง'
+        : 'เปิดรูปสลิปเดิมไม่ได้ ให้ผู้ดูแลตรวจไฟล์ใน Drive';
+      return;
+    }
+
+    rememberSlipCode(record.studentNumber, record.room, code);
+    AppState.slipImage = result.image;
+    AppState.slipFileName = 'สลิปการโอนเงินเดิม';
+    DOM.inputSlipCode.value = '';
+    DOM.savedSlipMessage.textContent = '';
+    renderSlipPreview();
+  } catch {
+    if (savedSlipRequest === request) DOM.savedSlipMessage.textContent = 'โหลดรูปไม่สำเร็จ ลองเปิดอีกครั้ง';
+  } finally {
+    if (savedSlipRequest === request) {
+      savedSlipRequest = null;
+      DOM.btnOpenSavedSlip.disabled = false;
+      if (AppState.existingRecord !== record) DOM.savedSlipMessage.textContent = '';
+    }
   }
 }
 
@@ -1063,9 +1073,7 @@ async function lookupStudentAndShowForm(studentNumber, room) {
         price: 390,
         timestamp: result.data.timestamp || '',
         status: result.data.status || 'รอชำระเงิน',
-        slipUrl: result.data.slipUrl || null,
-        slipImage: result.data.slipUrl || null,
-        slipFileName: 'สลิปการโอนเงินเดิม.jpg'
+        ...getSlipSummary(result.data)
       };
 
       switchToEditMode(gasRecord);
@@ -1105,8 +1113,6 @@ function switchToEditMode(record) {
   AppState.mode = 'edit';
   AppState.existingRecord = record;
   AppState.savedJerseyChanges = [];
-  AppState.slipChanged = false;
-  AppState.slipUrl = record.slipUrl || null;
 
   AppState.screenName = record.name;
   AppState.screenNumber = record.number;
@@ -1133,36 +1139,7 @@ function switchToEditMode(record) {
   // Show order status from Sheets (read-only)
   renderOrderStatus(AppState.orderStatus);
 
-  // Sync previous slip if present
-  if (record.slipImage || record.slipUrl) {
-    AppState.slipImage = record.slipImage || record.slipUrl;
-    AppState.slipUrl = record.slipUrl;
-    AppState.slipFileName = record.slipFileName || 'สลิปการโอนเงินเดิม.jpg';
-    AppState.slipUploadedAt = record.slipUploadedAt || record.timestamp || 'มีสลิปในระบบ';
-    console.log('[SLIP DEBUG] Loading slip from record');
-    console.log('[SLIP DEBUG] Has slipImage:', !!AppState.slipImage);
-    console.log('[SLIP DEBUG] Has slipUrl:', !!AppState.slipUrl);
-    console.log('[SLIP DEBUG] Full slipUrl:', AppState.slipUrl);
-    
-    // If it's a Drive URL, fetch via GAS proxy
-    if (AppState.slipUrl && AppState.slipUrl.indexOf('drive.google.com') > 0) {
-      const fileIdMatch = AppState.slipUrl.match(/[?&]id=([^&]+)/);
-      if (fileIdMatch && fileIdMatch[1]) {
-        console.log('[SLIP DEBUG] Fetching image via GAS proxy for fileId:', fileIdMatch[1]);
-        fetchDriveImageViaGAS(fileIdMatch[1]);
-      } else {
-        renderSlipPreview();
-      }
-    } else {
-      renderSlipPreview();
-    }
-  } else {
-    console.log('No slip found for this record');
-    AppState.slipImage = null;
-    AppState.slipFileName = '';
-    AppState.slipUploadedAt = null;
-    renderSlipPreview();
-  }
+  restoreSavedSlip();
 
   DOM.modeStatusBanner.classList.remove('hidden');
   DOM.btnSubmitText.textContent = 'บันทึกการแก้ไขข้อมูล';
@@ -1192,11 +1169,6 @@ function resetToNewMode() {
   AppState.mode = 'new';
   AppState.existingRecord = null;
   AppState.savedJerseyChanges = [];
-  AppState.slipChanged = false;
-  AppState.slipUrl = null;
-  AppState.slipImage = null;
-  AppState.slipFileName = '';
-  AppState.slipUploadedAt = null;
   AppState.orderStatus = 'รอชำระเงิน';
   
   // Clear form fields
@@ -1214,10 +1186,9 @@ function resetToNewMode() {
 
   // Hide order status display on reset
   if (DOM.orderStatusSection) DOM.orderStatusSection.classList.add('hidden');
-  AppState.orderStatus = 'รอชำระเงิน';
   
   // Clear slip preview
-  renderSlipPreview();
+  restoreSavedSlip();
   
   // Update button text
   DOM.modeStatusBanner.classList.add('hidden');
@@ -1235,9 +1206,6 @@ function resetForm() {
   AppState.studentNumber = '';
   AppState.room = '';
   AppState.size = 'L';
-  AppState.slipImage = null;
-  AppState.slipFileName = '';
-  AppState.slipUploadedAt = null;
 
   DOM.inputScreenName.value = '';
   DOM.inputScreenNumber.value = '10';
@@ -1247,35 +1215,9 @@ function resetForm() {
 
   DOM.sizeBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-size') === 'L'));
 
-  renderSlipPreview();
   resetToNewMode();
   hideFormContent(); // Hide form when reset
   updateLivePreview();
-}
-
-// ==========================================
-// 8. FETCH DRIVE IMAGE VIA GAS PROXY
-// ==========================================
-async function fetchDriveImageViaGAS(fileId) {
-  try {
-    console.log('[GAS PROXY] Fetching image for fileId:', fileId);
-    const url = `${CONFIG.GAS_URL}?action=getImage&fileId=${encodeURIComponent(fileId)}`;
-    
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.status === 'success' && data.image) {
-      console.log('[GAS PROXY] Image fetched successfully, size:', data.image.length);
-      AppState.slipImage = data.image; // base64 data URL
-      renderSlipPreview();
-    } else {
-      console.error('[GAS PROXY] Failed:', data.message);
-      showToast('ไม่สามารถโหลดสลิปจาก Google Drive ได้', 'error');
-    }
-  } catch (err) {
-    console.error('[GAS PROXY] Error:', err);
-    showToast('เกิดข้อผิดพลาดในการโหลดสลิป', 'error');
-  }
 }
 
 // ==========================================
@@ -1283,6 +1225,10 @@ async function fetchDriveImageViaGAS(fileId) {
 // ==========================================
 async function handleFormSubmit() {
   if (AppState.isSubmitting) return;
+  if (isPreparingSlip) {
+    showToast('รอให้เตรียมรูปสลิปเสร็จก่อนกดบันทึก', 'info');
+    return;
+  }
 
   const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
   const room = DOM.inputRoom.value.trim();
@@ -1328,22 +1274,17 @@ async function handleFormSubmit() {
   AppState.room = room;
 
   const originalRecord = AppState.existingRecord;
-  const orderActions = [DOM.btnLookupStudent, DOM.btnReset, DOM.btnCancelEditMode, DOM.btnSubmit];
+  const orderActions = [DOM.btnLookupStudent, DOM.btnReset, DOM.btnCancelEditMode, DOM.btnSubmit,
+    DOM.inputSlipFile, DOM.btnReplaceSavedSlip, DOM.btnChangeSlip, DOM.btnRemoveSlip];
   AppState.isSubmitting = true;
   orderActions.forEach(button => { button.disabled = true; });
   DOM.btnSubmitText.textContent = 'กำลังบันทึกข้อมูล...';
 
   const nowStr = new Date().toLocaleString('th-TH');
   
-  // Prepare data to send to Google Sheets
-  // Only send slipImage if it's new or changed
-  const shouldSendSlip = (AppState.mode === 'new' || AppState.slipChanged) && AppState.slipImage;
-  
-  console.log('[SUBMIT] Mode:', AppState.mode);
-  console.log('[SUBMIT] Slip changed:', AppState.slipChanged);
-  console.log('[SUBMIT] Has slipImage:', !!AppState.slipImage);
-  console.log('[SUBMIT] Has slipUrl:', !!AppState.slipUrl);
-  console.log('[SUBMIT] Should send slip:', shouldSendSlip);
+  const shouldSendSlip = AppState.slipChanged && Boolean(AppState.slipImage);
+  const slipCode = shouldSendSlip ? AppState.newSlipCode :
+    originalRecord ? readSlipCode(originalRecord.studentNumber, originalRecord.room) : '';
   
   const orderData = {
     studentNumber: studentNumber,
@@ -1356,17 +1297,15 @@ async function handleFormSubmit() {
     size: AppState.size,
     price: 390,
     timestamp: nowStr,
-    status: AppState.orderStatus || 'รอชำระเงิน',
+    status: shouldSendSlip ? 'รอตรวจสอบสลิป' : AppState.orderStatus,
     slipImage: shouldSendSlip ? AppState.slipImage : null,
-    slipUrl: (!shouldSendSlip && AppState.slipUrl) ? AppState.slipUrl : null,
+    slipCode: shouldSendSlip ? slipCode : '',
     slipFileName: AppState.slipFileName || null,
     slipUploadedAt: AppState.slipUploadedAt || (AppState.slipImage ? nowStr : null)
   };
   
-  console.log('[SUBMIT] Final orderData.slipImage:', orderData.slipImage ? 'YES (base64)' : 'NO');
-  console.log('[SUBMIT] Final orderData.slipUrl:', orderData.slipUrl || 'NO');
-
   // Send a CORS-safelisted text/plain JSON body, then verify the saved row with GAS GET.
+  let confirmedOrder = null;
   try {
     await fetch(AppState.gasUrl, {
       method: 'POST',
@@ -1375,28 +1314,31 @@ async function handleFormSubmit() {
       body: JSON.stringify(orderData)
     });
 
-    let verified = false;
-    for (let attempt = 0; attempt < 4 && !verified; attempt++) {
+    for (let attempt = 0; attempt < 4 && !confirmedOrder; attempt++) {
       if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 300 * attempt));
 
       const verifyUrl = new URL(AppState.gasUrl);
       verifyUrl.searchParams.set('action', 'search');
       verifyUrl.searchParams.set('studentNumber', studentNumber);
       verifyUrl.searchParams.set('room', room);
+      if (slipCode) verifyUrl.searchParams.set('slipCode', slipCode);
       verifyUrl.searchParams.set('_', Date.now().toString());
-      const verifyResponse = await fetch(verifyUrl.toString(), { cache: 'no-store' });
+      const verifyResponse = await fetch(verifyUrl, { cache: 'no-store', referrerPolicy: 'no-referrer' });
       const verifyResult = await verifyResponse.json();
       const saved = verifyResult?.status === 'success' && verifyResult.found && verifyResult.data;
 
-      verified = !!saved
+      const orderMatches = !!saved
         && String(saved.studentNumber ?? '').trim() === studentNumber
         && normalizeRoomValue(saved.room) === room
         && formatScreenName(saved.name) === orderData.name
         && String(saved.number ?? '').trim() === orderData.number
         && String(saved.size ?? '').trim().toUpperCase() === orderData.size;
+      if (orderMatches && (!shouldSendSlip || saved.slipAvailable === undefined || saved.slipCodeMatches === true)) {
+        confirmedOrder = saved;
+      }
     }
 
-    if (!verified) {
+    if (!confirmedOrder) {
       throw new Error('Google Sheets did not return the submitted order values.');
     }
   } catch (err) {
@@ -1409,25 +1351,34 @@ async function handleFormSubmit() {
     DOM.btnSubmitText.textContent = AppState.mode === 'edit' ? 'บันทึกการแก้ไขข้อมูล' : 'ยืนยันการสั่งจองและส่งสลิป';
   }
 
+  if (slipCode && confirmedOrder.slipCodeMatches === true) rememberSlipCode(studentNumber, room, slipCode);
+  const legacySlipUpload = shouldSendSlip && confirmedOrder.slipAvailable === undefined;
   if (originalRecord && AppState.existingRecord === originalRecord) {
     const savedChanges = getJerseyChanges(originalRecord, orderData);
     if (savedChanges.length) AppState.savedJerseyChanges = savedChanges;
-    AppState.existingRecord = {
-      ...originalRecord,
+    Object.assign(originalRecord, {
       name: orderData.name,
       number: orderData.number,
       size: orderData.size,
       studentNumber: orderData.studentNumber,
-      room: orderData.room
-    };
+      room: orderData.room,
+      ...getSlipSummary(confirmedOrder)
+    });
     renderJerseyChanges();
   }
   
-  // Reset slip changed flag after successful submit
   AppState.slipChanged = false;
+  AppState.newSlipCode = '';
+  AppState.slipUploadedAt = null;
+  renderOrderStatus(confirmedOrder.status || AppState.orderStatus);
 
   triggerConfetti();
-  showToast(AppState.mode === 'edit' ? 'บันทึกการแก้ไขเรียบร้อยแล้ว!' : 'สั่งจองเสื้อและแนบสลิปสำเร็จ!', 'success');
+  if (legacySlipUpload) {
+    DOM.slipStatusBadge.textContent = 'ส่งสลิปแล้ว รอยืนยันไฟล์';
+    showToast('บันทึกคำสั่งจองแล้ว แต่ยังยืนยันไฟล์สลิปไม่ได้', 'info');
+  } else {
+    showToast(shouldSendSlip ? 'บันทึกคำสั่งจองและสลิปแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+  }
 }
 
 // ==========================================
