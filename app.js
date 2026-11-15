@@ -89,12 +89,15 @@ const DOM = {
   statusBtns: document.querySelectorAll('.status-btn'),
 
   // Payment & Slip Upload Elements
+  btnOpenQrModal: document.getElementById('btnOpenQrModal'),
   btnCopyAccount: document.getElementById('btnCopyAccount'),
   qrPromptPayModal: document.getElementById('qrPromptPayModal'),
   btnCloseQrModal: document.getElementById('btnCloseQrModal'),
-  qrPromptPayImage: document.getElementById('qrPromptPayImage'),
-  promptPayNumber: document.getElementById('promptPayNumber'),
-  btnCopyPromptPay: document.getElementById('btnCopyPromptPay'),
+  bankAccountName: document.getElementById('bankAccountName'),
+  bankAccountNumber: document.getElementById('bankAccountNumber'),
+  qrAccountName: document.getElementById('qrAccountName'),
+  qrAccountNumber: document.getElementById('qrAccountNumber'),
+  copyAccountStatus: document.getElementById('copyAccountStatus'),
   slipDropzone: document.getElementById('slipDropzone'),
   inputSlipFile: document.getElementById('inputSlipFile'),
   slipPreviewCard: document.getElementById('slipPreviewCard'),
@@ -333,7 +336,7 @@ function bindEvents() {
   if (DOM.btnViewFront) DOM.btnViewFront.addEventListener('click', () => setJerseyView('front'));
   if (DOM.btnViewBoth) DOM.btnViewBoth.addEventListener('click', () => setJerseyView('both'));
 
-  // Payment Slip Upload Events
+  initPaymentQrEvents();
   initSlipUploadEvents();
 
   // Reset Form
@@ -373,13 +376,6 @@ function bindEvents() {
 // 5. SLIP UPLOAD & PROCESSING
 // ==========================================
 function initSlipUploadEvents() {
-  // Open QR PromptPay Modal
-  if (DOM.btnCopyAccount) {
-    DOM.btnCopyAccount.addEventListener('click', () => {
-      openQrPromptPayModal();
-    });
-  }
-
   // File Input Change
   if (DOM.inputSlipFile) {
     DOM.inputSlipFile.addEventListener('change', (e) => {
@@ -601,48 +597,29 @@ function initJerseyDock() {
 // ==========================================
 // QR PROMPTPAY MODAL
 // ==========================================
-function openQrPromptPayModal() {
-  const promptPayNumber = '0987654321'; // เลขพร้อมเพย์
-  const amount = ''; // ไม่ระบุจำนวนเงิน (ให้ผู้จ่ายกรอกเอง)
-  
-  // Generate QR Code using PromptPay API
-  const qrUrl = `https://promptpay.io/${promptPayNumber}${amount ? '/' + amount : ''}.png`;
-  
-  if (DOM.qrPromptPayImage) {
-    DOM.qrPromptPayImage.src = qrUrl;
-  }
-  
-  if (DOM.qrPromptPayModal) {
-    DOM.qrPromptPayModal.classList.remove('hidden');
-  }
-}
+function initPaymentQrEvents() {
+  const dialog = DOM.qrPromptPayModal;
+  const accountNumber = DOM.bankAccountNumber.textContent.trim();
+  DOM.qrAccountNumber.textContent = accountNumber;
+  DOM.qrAccountName.textContent = DOM.bankAccountName.textContent.trim();
 
-function closeQrPromptPayModal() {
-  if (DOM.qrPromptPayModal) {
-    DOM.qrPromptPayModal.classList.add('hidden');
-  }
-}
-
-// Event listeners for QR modal
-if (DOM.btnCloseQrModal) {
-  DOM.btnCloseQrModal.addEventListener('click', closeQrPromptPayModal);
-}
-
-if (DOM.qrPromptPayModal) {
-  DOM.qrPromptPayModal.addEventListener('click', (e) => {
-    if (e.target === DOM.qrPromptPayModal) {
-      closeQrPromptPayModal();
-    }
+  DOM.btnOpenQrModal.addEventListener('click', () => {
+    DOM.copyAccountStatus.textContent = '';
+    dialog.showModal();
+    dialog.scrollTop = 0;
   });
-}
+  DOM.btnCloseQrModal.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
 
-if (DOM.btnCopyPromptPay) {
-  DOM.btnCopyPromptPay.addEventListener('click', () => {
-    navigator.clipboard.writeText('0987654321').then(() => {
-      showToast('คัดลอกเลขพร้อมเพย์ 098-765-4321 แล้ว!', 'success');
-    }).catch(() => {
-      showToast('เลขพร้อมเพย์: 098-765-4321', 'info');
-    });
+  DOM.btnCopyAccount.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(accountNumber.replace(/-/g, ''));
+      DOM.copyAccountStatus.textContent = 'คัดลอกเลขบัญชีแล้ว';
+    } catch {
+      DOM.copyAccountStatus.textContent = 'แตะค้างที่เลขบัญชีเพื่อเลือกคัดลอก';
+    }
   });
 }
 
