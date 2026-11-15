@@ -103,10 +103,7 @@ const DOM = {
   slipDropzone: document.getElementById('slipDropzone'),
   inputSlipFile: document.getElementById('inputSlipFile'),
   savedSlipCard: document.getElementById('savedSlipCard'),
-  savedSlipForm: document.getElementById('savedSlipForm'),
   savedSlipMessage: document.getElementById('savedSlipMessage'),
-  inputSlipCode: document.getElementById('inputSlipCode'),
-  btnOpenSavedSlip: document.getElementById('btnOpenSavedSlip'),
   btnReplaceSavedSlip: document.getElementById('btnReplaceSavedSlip'),
   slipPreviewCard: document.getElementById('slipPreviewCard'),
   slipThumbnailImg: document.getElementById('slipThumbnailImg'),
@@ -177,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initJerseyDock();
   updateLivePreview();
   checkGasConnection();
+  openSlipFromLink();
   // Removed: loadOrdersDatabase() - No longer using LocalStorage
 });
 
@@ -428,10 +426,6 @@ function initSlipUploadEvents() {
   const chooseSlip = () => DOM.inputSlipFile.click();
   DOM.btnChangeSlip.addEventListener('click', chooseSlip);
   DOM.btnReplaceSavedSlip.addEventListener('click', chooseSlip);
-  DOM.savedSlipForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    loadSavedSlip(DOM.inputSlipCode.value.trim().toLowerCase());
-  });
 
   if (DOM.btnRemoveSlip) {
     DOM.btnRemoveSlip.addEventListener('click', () => {
@@ -441,12 +435,7 @@ function initSlipUploadEvents() {
   }
 
   if (DOM.btnViewSlipFullscreen) {
-    DOM.btnViewSlipFullscreen.addEventListener('click', () => {
-      if (AppState.slipImage) {
-        DOM.slipFullImg.src = AppState.slipImage;
-        DOM.modalSlipLightbox.classList.remove('hidden');
-      }
-    });
+    DOM.btnViewSlipFullscreen.addEventListener('click', showSlipLightbox);
   }
 
   if (DOM.btnCloseSlipLightbox) {
@@ -730,7 +719,6 @@ function renderSlipPreview() {
   DOM.paymentCompleteInfo.classList.toggle('hidden', !locked);
   DOM.slipDropzone.classList.toggle('hidden', locked || hasPreview || hasSavedSlip);
   DOM.savedSlipCard.classList.toggle('hidden', hasPreview || !hasSavedSlip);
-  DOM.savedSlipForm.classList.toggle('hidden', !record?.slipAvailable);
   DOM.btnReplaceSavedSlip.classList.toggle('hidden', locked);
   DOM.slipPreviewCard.classList.toggle('hidden', !hasPreview);
   DOM.btnChangeSlip.classList.toggle('hidden', locked);
@@ -746,6 +734,29 @@ function renderSlipPreview() {
     DOM.slipFullImg.removeAttribute('src');
     DOM.modalSlipLightbox.classList.add('hidden');
   }
+}
+
+function showSlipLightbox() {
+  if (!AppState.slipImage) return;
+  DOM.slipFullImg.src = AppState.slipImage;
+  DOM.modalSlipLightbox.classList.remove('hidden');
+}
+
+function openSlipFromLink() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  if (!params.has('slip')) return;
+
+  const slipCode = params.get('slip').trim().toLowerCase();
+  const studentNumber = (params.get('no') || '').replace(/\s+/g, '');
+  const room = normalizeRoomValue(params.get('room'));
+  // Keep the private link token out of the address bar after opening it.
+  history.replaceState(history.state, '', window.location.pathname + window.location.search);
+  const knownRoom = Array.from(DOM.inputRoom.options).some(option => option.value === room);
+  if (!SLIP_CODE_PATTERN.test(slipCode) || !/^[0-9]{1,3}[ก-ฮ]?$/u.test(studentNumber) || !room || !knownRoom) {
+    showToast('ลิงก์สลิปไม่ถูกต้อง กรุณาขอลิงก์ใหม่จากผู้ดูแล', 'error');
+    return;
+  }
+  lookupStudentAndShowForm(studentNumber, room, slipCode);
 }
 
 function getSlipSummary(data) {
@@ -772,17 +783,16 @@ function rememberSlipCode(studentNumber, room, code) {
   try {
     localStorage.setItem(slipCodeStorageKey(studentNumber, room), code);
   } catch {
-    // The code can still be entered again in browsers that block local storage.
+    // The private link still works when local storage is unavailable.
   }
 }
 
 function cancelSavedSlipLoad() {
   savedSlipRequest?.abort();
   savedSlipRequest = null;
-  DOM.btnOpenSavedSlip.disabled = false;
 }
 
-function restoreSavedSlip() {
+function restoreSavedSlip(linkCode = '') {
   cancelSavedSlipLoad();
   slipSelection++;
   isPreparingSlip = false;
@@ -792,30 +802,26 @@ function restoreSavedSlip() {
   AppState.slipFileName = '';
   AppState.slipUploadedAt = null;
   DOM.inputSlipFile.value = '';
-  DOM.inputSlipCode.value = '';
   const record = AppState.existingRecord;
-  DOM.savedSlipMessage.textContent = record?.hasSlip && !record.slipAvailable
-    ? 'ติดต่อผู้ดูแลเพื่อขอรหัสหรือให้ตรวจรูปสลิปเดิม'
+  DOM.savedSlipMessage.textContent = record?.hasSlip
+    ? (record.slipAvailable ? 'เปิดรูปจากลิงก์ส่วนตัวของรายการนี้' : 'ติดต่อผู้ดูแลเพื่อให้ตรวจรูปสลิปเดิม')
     : '';
   renderSlipPreview();
   if (record?.slipAvailable) {
-    const code = readSlipCode(record.studentNumber, record.room);
-    if (code) loadSavedSlip(code);
+    const code = linkCode || readSlipCode(record.studentNumber, record.room);
+    if (SLIP_CODE_PATTERN.test(code)) loadSavedSlip(code, Boolean(linkCode));
+  } else if (linkCode) {
+    showToast('ยังเปิดรูปสลิปของรายการนี้ไม่ได้ กรุณาติดต่อผู้ดูแล', 'error');
   }
 }
 
-async function loadSavedSlip(code) {
+async function loadSavedSlip(code, openFullImage) {
   const record = AppState.existingRecord;
   if (!record?.slipAvailable || AppState.slipChanged || isPreparingSlip) return;
-  if (!SLIP_CODE_PATTERN.test(code)) {
-    DOM.savedSlipMessage.textContent = 'กรุณากรอกรหัสเปิดสลิป 32 ตัวจากผู้ดูแล';
-    return;
-  }
 
   cancelSavedSlipLoad();
   const request = new AbortController();
   savedSlipRequest = request;
-  DOM.btnOpenSavedSlip.disabled = true;
   DOM.savedSlipMessage.textContent = 'กำลังโหลดรูปสลิป…';
   try {
     const url = new URL(AppState.gasUrl);
@@ -828,23 +834,26 @@ async function loadSavedSlip(code) {
     if (savedSlipRequest !== request || AppState.existingRecord !== record) return;
     if (result.status !== 'success' || !/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(result.image)) {
       DOM.savedSlipMessage.textContent = result.code === 'invalid_slip_code'
-        ? 'รหัสนี้ไม่ตรงกับสลิปของรายการ กรุณาตรวจรหัสอีกครั้ง'
+        ? 'ขอลิงก์เปิดสลิปล่าสุดจากผู้ดูแล'
         : 'เปิดรูปสลิปเดิมไม่ได้ ให้ผู้ดูแลตรวจไฟล์ใน Drive';
+      if (openFullImage) showToast(DOM.savedSlipMessage.textContent, 'error');
       return;
     }
 
     rememberSlipCode(record.studentNumber, record.room, code);
     AppState.slipImage = result.image;
     AppState.slipFileName = 'สลิปการโอนเงินเดิม';
-    DOM.inputSlipCode.value = '';
     DOM.savedSlipMessage.textContent = '';
     renderSlipPreview();
+    if (openFullImage) showSlipLightbox();
   } catch {
-    if (savedSlipRequest === request) DOM.savedSlipMessage.textContent = 'โหลดรูปไม่สำเร็จ ลองเปิดอีกครั้ง';
+    if (savedSlipRequest === request) {
+      DOM.savedSlipMessage.textContent = 'โหลดรูปไม่สำเร็จ ลองเปิดรายการอีกครั้ง';
+      if (openFullImage) showToast('โหลดรูปไม่สำเร็จ ลองเปิดลิงก์อีกครั้ง', 'error');
+    }
   } finally {
     if (savedSlipRequest === request) {
       savedSlipRequest = null;
-      DOM.btnOpenSavedSlip.disabled = false;
       if (AppState.existingRecord !== record) DOM.savedSlipMessage.textContent = '';
     }
   }
@@ -1036,7 +1045,7 @@ function showFormContent() {
   if (DOM.submitButtonSection) DOM.submitButtonSection.classList.remove('hidden');
 }
 
-async function lookupStudentAndShowForm(studentNumber, room) {
+async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
   hideFormContent();
   resetToNewMode();
   AppState.studentNumber = studentNumber;
@@ -1076,13 +1085,18 @@ async function lookupStudentAndShowForm(studentNumber, room) {
         ...getSlipSummary(result.data)
       };
 
-      switchToEditMode(gasRecord);
+      switchToEditMode(gasRecord, slipCode);
       showFormContent();
       DOM.studentLookupStatus.textContent = 'พบข้อมูลเดิมแล้ว ดึงรายละเอียดคำสั่งจองมาให้';
       showToast('พบข้อมูลเดิมจาก Google Sheets', 'success');
       return;
     }
 
+    if (slipCode) {
+      DOM.studentLookupStatus.textContent = 'ไม่พบรายการจากลิงก์สลิป กรุณาติดต่อผู้ดูแล';
+      showToast(DOM.studentLookupStatus.textContent, 'error');
+      return;
+    }
     showFormContent();
     DOM.studentLookupStatus.textContent = `ยังไม่มีรายการของเลขที่ ${studentNumber} ห้อง ${room} เริ่มสั่งจองได้`;
     showToast('ไม่พบข้อมูลเดิม เริ่มสั่งจองใหม่ได้', 'success');
@@ -1109,7 +1123,7 @@ function updateOrdersCountBadge() {
   // Removed - no longer tracking local count
 }
 
-function switchToEditMode(record) {
+function switchToEditMode(record, slipCode) {
   AppState.mode = 'edit';
   AppState.existingRecord = record;
   AppState.savedJerseyChanges = [];
@@ -1139,7 +1153,7 @@ function switchToEditMode(record) {
   // Show order status from Sheets (read-only)
   renderOrderStatus(AppState.orderStatus);
 
-  restoreSavedSlip();
+  restoreSavedSlip(slipCode);
 
   DOM.modeStatusBanner.classList.remove('hidden');
   DOM.btnSubmitText.textContent = 'บันทึกการแก้ไขข้อมูล';

@@ -388,12 +388,12 @@ function slipDriveUrl(fileId) {
   return "https://drive.google.com/file/d/" + fileId + "/view";
 }
 
-// Run from the Apps Script editor after deploying this version.
-// This creates a separate private report. Share each code only with the order's owner.
+// Run from the Apps Script editor to create a private report of slip links.
+// Share each link only with the order's owner.
 function prepareExistingSlipCodes() {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
-  var reportRows = [["เลขที่", "ห้อง", "รหัสเปิดสลิป", "ลิงก์ Drive สำหรับผู้ดูแล"]];
+  var reportRows = [["เลขที่", "ห้อง", "เปิดสลิปในเว็บ", "ลิงก์ Drive สำหรับผู้ดูแล"]];
   var added = {};
   try {
     var sheet = getOrCreateSheet();
@@ -414,7 +414,8 @@ function prepareExistingSlipCodes() {
       var key = slipCodeProperty(slip.fileId);
       var code = normalizeSlipCode(existing[key]) || added[key];
       if (!code) code = added[key] = generateSlipCode();
-      reportRows.push([student, room, code, slipDriveUrl(slip.fileId)]);
+      var url = "https://authong.store/#slip=" + code + "&no=" + encodeURIComponent(student) + "&room=" + encodeURIComponent(room);
+      reportRows.push([student, room, '=HYPERLINK("' + url + '","เปิดรูปสลิป")', slipDriveUrl(slip.fileId)]);
     }
     if (Object.keys(added).length) properties.setProperties(added);
   } finally {
@@ -425,16 +426,17 @@ function prepareExistingSlipCodes() {
     Logger.log("No saved slip links were found.");
     return;
   }
-  var report = SpreadsheetApp.create("Authong - รหัสเปิดสลิป (ส่วนตัว)", reportRows.length, 4);
+  var report = SpreadsheetApp.create("Authong - ลิงก์เปิดสลิป (ส่วนตัว)", reportRows.length, 4);
   if (DriveApp.getFileById(report.getId()).getSharingAccess() !== DriveApp.Access.PRIVATE) {
-    throw new Error("The slip code report must be restricted before writing codes.");
+    throw new Error("The slip report must be restricted before writing links.");
   }
   var tab = report.getSheets()[0];
-  tab.getRange(1, 1, reportRows.length, 4).setNumberFormat("@").setValues(reportRows);
+  tab.getRange(2, 1, reportRows.length - 1, 2).setNumberFormat("@");
+  tab.getRange(1, 1, reportRows.length, 4).setValues(reportRows);
   tab.setFrozenRows(1);
-  tab.setColumnWidth(3, 290);
+  tab.setColumnWidth(3, 170);
   tab.setColumnWidth(4, 440);
-  Logger.log("ไฟล์รหัสเปิดสลิปส่วนตัว: " + report.getUrl());
+  Logger.log("ไฟล์ลิงก์เปิดสลิปส่วนตัว: " + report.getUrl());
   return report.getUrl();
 }
 
