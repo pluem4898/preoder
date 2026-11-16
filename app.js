@@ -21,6 +21,8 @@ const JERSEY_CONFIG = {
 // ==========================================
 // 1. APPLICATION STATE
 // ==========================================
+const JERSEY_PRICE = 269;
+
 const AppState = {
   mode: 'new', // 'new' | 'edit'
   viewSide: 'back', // 'back' | 'front' | 'both'
@@ -170,6 +172,9 @@ const DOM = {
 // 3. INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-jersey-price]').forEach(label => {
+    label.textContent = `฿${JERSEY_PRICE}`;
+  });
   bindEvents();
   initJerseyDock();
   updateLivePreview();
@@ -1079,7 +1084,6 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
         name: String(result.data.name ?? ''),
         number: String(result.data.number ?? '').trim(),
         size: String(result.data.size ?? '').trim().toUpperCase() || 'L',
-        price: 390,
         timestamp: result.data.timestamp || '',
         status: result.data.status || 'รอชำระเงิน',
         ...getSlipSummary(result.data)
@@ -1309,7 +1313,7 @@ async function handleFormSubmit() {
     name,
     number: number,
     size: AppState.size,
-    price: 390,
+    price: JERSEY_PRICE,
     timestamp: nowStr,
     status: shouldSendSlip ? 'รอตรวจสอบสลิป' : AppState.orderStatus,
     slipImage: shouldSendSlip ? AppState.slipImage : null,
