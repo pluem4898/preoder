@@ -8,6 +8,8 @@
   <meta name="description"
     content="Official Jersey Studio - Authong Athletics 2026. สกรีนชื่อและเบอร์เสื้อกีฬาสีทีมสีม่วง">
   <link rel="icon" type="image/png" href="./authong-favicon.png?v=20261115-3">
+  <link rel="preload" as="image" href="./jersey_authong_back.webp" type="image/webp" fetchpriority="high">
+  <link rel="preload" as="font" href="./fonts/DOSIyagiBoldface.woff2" type="font/woff2" crossorigin>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -36,7 +38,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261116-2">
+  <link rel="stylesheet" href="style.css?v=20261116-6">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -103,6 +105,7 @@
         <!-- Floating Transparent Jersey Canvas -->
         <div class="jersey-stage-container w-full flex items-center justify-center py-2">
           <div id="jerseyCardWrapper" class="jersey-card-wrapper relative">
+            <p id="jerseyArtworkStatus" class="jersey-artwork-status" role="status">กำลังโหลดภาพเสื้อ…</p>
             <svg class="absolute pointer-events-none" width="0" height="0" aria-hidden="true"
               xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -493,7 +496,9 @@
       <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
         <div
           class="md:col-span-5 flex flex-col items-center justify-center p-3 bg-purple-50/50 rounded-2xl border border-purple-100">
-          <img src="./jersey_authong_front.png" alt="เสื้อ Authong รุ่นปี 2026" class="w-full max-w-[200px] object-contain">
+          <div class="relative w-full max-w-[200px]" style="aspect-ratio: 416 / 362">
+            <div id="sizeGuideJerseyEl" class="jersey-hd-front" role="img" aria-label="เสื้อ Authong รุ่นปี 2026"></div>
+          </div>
           <p class="text-[11px] text-slate-500 mt-2 text-center">&bull; <strong>รอบอก</strong> วัดรอบส่วนที่กว้างที่สุด
             (นิ้ว)</p>
         </div>
@@ -750,7 +755,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261116-5"></script>
+  <script src="app.js?v=20261116-6"></script>
 </body>
 
 </html>

@@ -572,46 +572,47 @@ body.size-guide-open {
   }
 }
 
-.jersey-hd-back {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background-image: url('./jersey_authong_back.png');
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-color: transparent !important;
-}
-
-.jersey-hd-front {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background-image: url('./jersey_authong_front.png');
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-color: transparent !important;
-}
-
+.jersey-hd-back,
+.jersey-hd-front,
 .jersey-hd-both {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  background-image: url('./jersey_authong_back.png'), url('./jersey_authong_front.png');
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: transparent !important;
+  visibility: hidden;
+}
+
+.jersey-hd-both {
   background-size: auto 100%, auto 100%;
   background-position: left center, right center;
-  background-repeat: no-repeat, no-repeat;
-  background-color: transparent !important;
+}
+
+.artwork-ready {
+  visibility: visible;
+}
+
+.jersey-artwork-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.5rem;
+  color: var(--apple-text-secondary);
+  font-size: 0.75rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.jersey-artwork-status[hidden] {
+  display: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .jersey-hd-back,
-  .jersey-hd-front,
-  .jersey-hd-both {
+  .artwork-ready {
     animation: jerseyViewIn 0.2s ease-out;
   }
 }

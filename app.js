@@ -145,6 +145,8 @@ const DOM = {
   jerseyViewBackEl: document.getElementById('jerseyViewBackEl'),
   jerseyViewFrontEl: document.getElementById('jerseyViewFrontEl'),
   jerseyViewBothEl: document.getElementById('jerseyViewBothEl'),
+  jerseyArtworkStatus: document.getElementById('jerseyArtworkStatus'),
+  sizeGuideJerseyEl: document.getElementById('sizeGuideJerseyEl'),
 
   // SVG Text
   svgBackName: document.getElementById('svgBackName'),
@@ -187,6 +189,13 @@ const DOM = {
   toastContainer: document.getElementById('toastContainer')
 };
 
+const JERSEY_VIEWS = {
+  back: { element: DOM.jerseyViewBackEl, button: DOM.btnViewBack },
+  front: { element: DOM.jerseyViewFrontEl, button: DOM.btnViewFront },
+  both: { element: DOM.jerseyViewBothEl, button: DOM.btnViewBoth }
+};
+const jerseyArtworkRequests = new Map();
+
 // ==========================================
 // 3. INITIALIZATION
 // ==========================================
@@ -199,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initJerseyDock();
   updateLivePreview();
   document.fonts?.addEventListener('loadingdone', renderJerseyPrint);
+  updateJerseyArtwork(AppState.viewSide);
   checkGasConnection();
   openSlipFromLink();
   // Removed: loadOrdersDatabase() - No longer using LocalStorage
@@ -244,6 +254,7 @@ function canBookRoom(room) {
 function bindEvents() {
   const openSizeGuide = () => {
     if (!DOM.modalSizeGuide) return;
+    prepareJerseyArtwork(DOM.sizeGuideJerseyEl, 'front');
     DOM.modalSizeGuide.classList.remove('hidden');
     document.documentElement.classList.add('size-guide-open');
     document.body.classList.add('size-guide-open');
@@ -1091,23 +1102,75 @@ function updateLivePreview() {
   renderJerseyChanges();
 }
 
-function setJerseyView(side) {
-  if (AppState.viewSide === side) return;
-  AppState.viewSide = side;
-
-  const views = [
-    ['back', DOM.jerseyViewBackEl, DOM.btnViewBack],
-    ['front', DOM.jerseyViewFrontEl, DOM.btnViewFront],
-    ['both', DOM.jerseyViewBothEl, DOM.btnViewBoth]
-  ];
-  for (const [viewSide, view, button] of views) {
-    const selected = side === viewSide;
-    view.classList.toggle('hidden', !selected);
-    button.classList.toggle('active', selected);
-    button.setAttribute('aria-pressed', String(selected));
+async function decodeJerseyImage(src) {
+  const image = new Image();
+  if (typeof image.decode === 'function') {
+    image.src = src;
+    await image.decode();
+  } else {
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+      image.src = src;
+    });
   }
-  DOM.jerseyCardWrapper.classList.toggle('is-dual-view', side === 'both');
-  renderJerseyPrint();
+  return image;
+}
+
+function loadJerseyArtwork(side) {
+  if (!jerseyArtworkRequests.has(side)) {
+    const file = `./jersey_authong_${side}`;
+    const assets = [decodeJerseyImage(file + '.webp').catch(() => decodeJerseyImage(file + '.png'))];
+    if (side === 'back') {
+      assets.push(decodeJerseyImage('./jersey-authong-back-fabric.png'), decodeJerseyImage('./authong-logo.png'));
+    }
+    const request = Promise.all(assets).then(([artwork]) => artwork).catch(error => {
+      jerseyArtworkRequests.delete(side);
+      throw error;
+    });
+    jerseyArtworkRequests.set(side, request);
+  }
+  return jerseyArtworkRequests.get(side);
+}
+
+async function prepareJerseyArtwork(element, side) {
+  if (element.classList.contains('artwork-ready')) return true;
+  const sides = side === 'both' ? ['back', 'front'] : [side];
+  try {
+    const images = await Promise.all(sides.map(loadJerseyArtwork));
+    element.style.backgroundImage = images.map(image => `url("${image.src}")`).join(', ');
+    element.classList.add('artwork-ready');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function updateJerseyArtwork(side) {
+  const { element } = JERSEY_VIEWS[side];
+  const status = DOM.jerseyArtworkStatus;
+  status.hidden = element.classList.contains('artwork-ready');
+  if (!status.hidden) status.textContent = 'กำลังโหลดภาพเสื้อ…';
+
+  const ready = await prepareJerseyArtwork(element, side);
+  if (AppState.viewSide !== side) return;
+  status.hidden = ready;
+  if (ready) renderJerseyPrint();
+  else status.textContent = 'โหลดภาพเสื้อไม่สำเร็จ กดมุมมองเดิมเพื่อลองใหม่';
+}
+
+function setJerseyView(side) {
+  if (AppState.viewSide !== side) {
+    AppState.viewSide = side;
+    for (const [viewSide, { element, button }] of Object.entries(JERSEY_VIEWS)) {
+      const selected = side === viewSide;
+      element.classList.toggle('hidden', !selected);
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    }
+    DOM.jerseyCardWrapper.classList.toggle('is-dual-view', side === 'both');
+  }
+  updateJerseyArtwork(side);
 }
 
 // ==========================================
@@ -1172,8 +1235,9 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
 
       switchToEditMode(gasRecord, slipCode);
       showFormContent();
-      DOM.studentLookupStatus.textContent = 'พบข้อมูลเดิมแล้ว ดึงรายละเอียดคำสั่งจองมาให้';
-      showToast('พบข้อมูลเดิมจาก Google Sheets', 'success');
+      const loadedMessage = 'โหลดข้อมูลสำเร็จ';
+      DOM.studentLookupStatus.textContent = loadedMessage;
+      showToast(loadedMessage, 'success');
       return;
     }
 
