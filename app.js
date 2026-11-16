@@ -21,7 +21,19 @@ const JERSEY_CONFIG = {
 // ==========================================
 // 1. APPLICATION STATE
 // ==========================================
-const JERSEY_PRICE = 269;
+const JERSEY_PRICE = 279;
+const NEW_STUDENT_NUMBER_PATTERN = /^(?:[1-9]|1[0-9]|20)[กข]$/u;
+const LEGACY_STUDENT_NUMBER_PATTERN = /^[0-9]{1,3}[ก-ฮ]?$/u;
+// These rooms also work with Apps Script deployments that predate the expanded list.
+const PREVIOUS_ROOMS = new Set([
+  'ม.1/3', 'ม.1/8', 'ม.1/13',
+  'ม.2/2', 'ม.2/7', 'ม.2/12', 'ม.2/17',
+  'ม.3/6', 'ม.3/11', 'ม.3/16',
+  'ม.4/1', 'ม.4/5', 'ม.4/10', 'ม.4/15',
+  'ม.5/4', 'ม.5/9', 'ม.5/14',
+  'ม.6/1', 'ม.6/12', 'ม.6/13'
+]);
+const ROOM_UNAVAILABLE_MESSAGE = 'ห้องนี้จะเปิดให้จองเมื่อระบบบันทึกข้อมูลอัปเดตแล้ว';
 
 const AppState = {
   mode: 'new', // 'new' | 'edit'
@@ -33,6 +45,7 @@ const AppState = {
   screenNumber: '10',
   paymentStatus: 'pending', // legacy
   orderStatus: 'รอชำระเงิน', // ค่าสถานะหลักที่บันทึกลง Sheets
+  allRoomsSupported: false,
   slipImage: null, // Base64 data URL
   slipFileName: '',
   slipUploadedAt: null,
@@ -61,6 +74,8 @@ const DOM = {
   inputScreenName: document.getElementById('inputScreenName'),
   inputScreenNumber: document.getElementById('inputScreenNumber'),
   inputStudentNumber: document.getElementById('inputStudentNumber'),
+  inputLegacyStudentNumber: document.getElementById('inputLegacyStudentNumber'),
+  legacyStudentNumberField: document.getElementById('legacyStudentNumberField'),
   inputRoom: document.getElementById('inputRoom'),
   btnLookupStudent: document.getElementById('btnLookupStudent'),
   studentLookupSpinner: document.getElementById('studentLookupSpinner'),
@@ -175,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-jersey-price]').forEach(label => {
     label.textContent = `฿${JERSEY_PRICE}`;
   });
+  initStudentOptions();
   bindEvents();
   initJerseyDock();
   updateLivePreview();
@@ -182,6 +198,40 @@ document.addEventListener('DOMContentLoaded', () => {
   openSlipFromLink();
   // Removed: loadOrdersDatabase() - No longer using LocalStorage
 });
+
+function initStudentOptions() {
+  for (const group of DOM.inputStudentNumber.querySelectorAll('optgroup')) {
+    for (let number = 1; number <= 20; number++) {
+      const studentNumber = number + group.dataset.studentSuffix;
+      group.append(new Option(studentNumber, studentNumber));
+    }
+  }
+
+  for (let grade = 1; grade <= 6; grade++) {
+    const group = document.createElement('optgroup');
+    group.label = 'ม.' + grade;
+    for (let number = 1; number <= 17; number++) {
+      const room = group.label + '/' + number;
+      group.append(new Option(room, room));
+    }
+    DOM.inputRoom.append(group);
+  }
+}
+
+function getStudentNumberInput() {
+  return DOM.inputStudentNumber.value === 'legacy' ? DOM.inputLegacyStudentNumber : DOM.inputStudentNumber;
+}
+
+function setStudentNumberSelection(studentNumber) {
+  const legacy = studentNumber !== '' && !NEW_STUDENT_NUMBER_PATTERN.test(studentNumber);
+  DOM.inputStudentNumber.value = legacy ? 'legacy' : studentNumber;
+  DOM.inputLegacyStudentNumber.value = legacy ? studentNumber : '';
+  DOM.legacyStudentNumberField.hidden = !legacy;
+}
+
+function canBookRoom(room) {
+  return AppState.allRoomsSupported || PREVIOUS_ROOMS.has(room);
+}
 
 // ==========================================
 // 4. EVENT BINDINGS
@@ -202,12 +252,16 @@ function bindEvents() {
 
   // Student number + room identify and load an existing order.
   DOM.btnLookupStudent.addEventListener('click', () => {
-    const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
+    const input = getStudentNumberInput();
+    const studentNumber = input.value.replace(/\s+/g, '');
     const room = DOM.inputRoom.value.trim();
 
-    if (!/^[0-9]{1,3}[ก-ฮ]?$/u.test(studentNumber)) {
-      showToast('กรุณากรอกเลขที่ เช่น 8, 08, 8ก หรือ 5ข', 'error');
-      DOM.inputStudentNumber.focus();
+    if (!LEGACY_STUDENT_NUMBER_PATTERN.test(studentNumber)) {
+      const message = input === DOM.inputStudentNumber
+        ? 'กรุณาเลือกเลขที่'
+        : 'กรุณากรอกเลขที่ที่ใช้จองไว้';
+      showToast(message, 'error');
+      input.focus();
       return;
     }
     if (!room) {
@@ -216,8 +270,6 @@ function bindEvents() {
       return;
     }
 
-    AppState.studentNumber = studentNumber;
-    AppState.room = room;
     lookupStudentAndShowForm(studentNumber, room);
   });
 
@@ -244,29 +296,8 @@ function bindEvents() {
     });
   });
 
-  let isStudentNumberComposing = false;
-  DOM.inputStudentNumber.addEventListener('compositionstart', () => {
-    isStudentNumberComposing = true;
-  });
-  DOM.inputStudentNumber.addEventListener('compositionend', () => {
-    isStudentNumberComposing = false;
-    const raw = DOM.inputStudentNumber.value.replace(/\s+/g, '');
-    const val = (raw.match(/^[0-9]{0,3}[ก-ฮ]?/u) || [''])[0];
-    AppState.studentNumber = val;
-    DOM.inputStudentNumber.value = val;
-  });
-  DOM.inputStudentNumber.addEventListener('input', (e) => {
-    if (isStudentNumberComposing || e.isComposing) return;
-    const raw = e.target.value.replace(/\s+/g, '');
-    const val = (raw.match(/^[0-9]{0,3}[ก-ฮ]?/u) || [''])[0];
-    AppState.studentNumber = val;
-    if (e.target.value !== val) e.target.value = val;
-  });
-  DOM.inputStudentNumber.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.isComposing && !isStudentNumberComposing) {
-      event.preventDefault();
-      DOM.inputStudentNumber.blur();
-    }
+  DOM.inputStudentNumber.addEventListener('change', () => {
+    DOM.legacyStudentNumberField.hidden = DOM.inputStudentNumber.value !== 'legacy';
   });
 
   DOM.inputRoom.addEventListener('change', (e) => {
@@ -757,7 +788,7 @@ function openSlipFromLink() {
   // Keep the private link token out of the address bar after opening it.
   history.replaceState(history.state, '', window.location.pathname + window.location.search);
   const knownRoom = Array.from(DOM.inputRoom.options).some(option => option.value === room);
-  if (!SLIP_CODE_PATTERN.test(slipCode) || !/^[0-9]{1,3}[ก-ฮ]?$/u.test(studentNumber) || !room || !knownRoom) {
+  if (!SLIP_CODE_PATTERN.test(slipCode) || !LEGACY_STUDENT_NUMBER_PATTERN.test(studentNumber) || !room || !knownRoom) {
     showToast('ลิงก์สลิปไม่ถูกต้อง กรุณาขอลิงก์ใหม่จากผู้ดูแล', 'error');
     return;
   }
@@ -980,42 +1011,21 @@ function updateLivePreview() {
     element.setAttribute('y', backName.y.toString());
     element.setAttribute('font-size', fontSize.toString());
     element.setAttribute('letter-spacing', letterSpacing);
-    element.style.fontFamily = "'Chakra Petch', 'Kanit', sans-serif";
-    element.style.fontWeight = '700';
-    element.style.fill = '#ffffff';
   };
 
   updateNameText(DOM.svgBackName, dynamicSize);
   updateNameText(DOM.svgBothName, Math.round(dynamicSize * 0.95));
 
-  // Back number placement on the new jersey artwork.
-  if (DOM.svgBackNumber) {
-    DOM.svgBackNumber.style.fontFamily = "'Press Start 2P', 'Chakra Petch', monospace";
-    DOM.svgBackNumber.setAttribute('font-size', backNumber.size.toString());
-    DOM.svgBackNumber.setAttribute('x', backNumber.x.toString());
-    DOM.svgBackNumber.setAttribute('y', backNumber.y.toString());
-    DOM.svgBackNumber.setAttribute('textLength', numberWidth);
-    DOM.svgBackNumber.textContent = displayNumber;
+  for (const element of [DOM.svgBackNumber, DOM.svgBothNumber]) {
+    if (!element) continue;
+    element.setAttribute('font-size', backNumber.size.toString());
+    element.setAttribute('x', backNumber.x.toString());
+    element.setAttribute('y', backNumber.y.toString());
+    element.setAttribute('textLength', numberWidth);
+    element.textContent = displayNumber;
   }
 
-  // Both-sides view keeps the back on the left and the supplied front art on the right.
-  if (DOM.svgBothNumber) {
-    DOM.svgBothNumber.style.fontFamily = "'Press Start 2P', 'Chakra Petch', monospace";
-    DOM.svgBothNumber.setAttribute('font-size', backNumber.size.toString());
-    DOM.svgBothNumber.setAttribute('x', backNumber.x.toString());
-    DOM.svgBothNumber.setAttribute('y', backNumber.y.toString());
-    DOM.svgBothNumber.setAttribute('textLength', numberWidth);
-    DOM.svgBothNumber.textContent = displayNumber;
-  }
-
-  applyNumberStyle();
   renderJerseyChanges();
-}
-
-function applyNumberStyle() {
-  const cls = 'number-style-clean';
-  if (DOM.svgBackNumber) DOM.svgBackNumber.setAttribute('class', cls);
-  if (DOM.svgBothNumber) DOM.svgBothNumber.setAttribute('class', cls);
 }
 
 function setJerseyView(side) {
@@ -1055,7 +1065,7 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
   resetToNewMode();
   AppState.studentNumber = studentNumber;
   AppState.room = room;
-  DOM.inputStudentNumber.value = studentNumber;
+  setStudentNumberSelection(studentNumber);
   DOM.inputRoom.value = room;
   DOM.studentLookupSpinner.classList.remove('hidden');
   DOM.studentLookupText.textContent = 'กำลังตรวจสอบ...';
@@ -1077,9 +1087,16 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
       throw new Error(result && result.message ? result.message : 'Invalid response from Google Sheets.');
     }
 
+    AppState.allRoomsSupported = result.allRooms === true;
+    if (!slipCode && !canBookRoom(room)) {
+      DOM.studentLookupStatus.textContent = ROOM_UNAVAILABLE_MESSAGE;
+      showToast(ROOM_UNAVAILABLE_MESSAGE, 'info');
+      return;
+    }
+
     if (result.found && result.data) {
       const gasRecord = {
-        studentNumber: (result.data.studentNumber || studentNumber).toString(),
+        studentNumber: String(result.data.studentNumber || studentNumber).replace(/\s+/g, ''),
         room: normalizeRoomValue(result.data.room || room),
         name: String(result.data.name ?? ''),
         number: String(result.data.number ?? '').trim(),
@@ -1096,8 +1113,10 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
       return;
     }
 
-    if (slipCode) {
-      DOM.studentLookupStatus.textContent = 'ไม่พบรายการจากลิงก์สลิป กรุณาติดต่อผู้ดูแล';
+    if (slipCode || !NEW_STUDENT_NUMBER_PATTERN.test(studentNumber)) {
+      DOM.studentLookupStatus.textContent = slipCode
+        ? 'ไม่พบรายการจากลิงก์สลิป กรุณาติดต่อผู้ดูแล'
+        : 'ไม่พบรายการจากเลขที่เดิม หากต้องการจองใหม่ให้เลือกเลขที่ในเมนู';
       showToast(DOM.studentLookupStatus.textContent, 'error');
       return;
     }
@@ -1141,7 +1160,7 @@ function switchToEditMode(record, slipCode) {
 
   DOM.inputScreenName.value = AppState.screenName;
   DOM.inputScreenNumber.value = AppState.screenNumber;
-  DOM.inputStudentNumber.value = AppState.studentNumber;
+  setStudentNumberSelection(AppState.studentNumber);
   DOM.inputRoom.value = AppState.room;
 
   DOM.sizeBtns.forEach(btn => {
@@ -1227,7 +1246,7 @@ function resetForm() {
 
   DOM.inputScreenName.value = '';
   DOM.inputScreenNumber.value = '10';
-  DOM.inputStudentNumber.value = '';
+  setStudentNumberSelection('');
   DOM.inputRoom.value = '';
   DOM.studentLookupStatus.textContent = '';
 
@@ -1248,7 +1267,9 @@ async function handleFormSubmit() {
     return;
   }
 
-  const studentNumber = DOM.inputStudentNumber.value.replace(/\s+/g, '').trim();
+  const originalRecord = AppState.existingRecord;
+  const studentNumberInput = getStudentNumberInput();
+  const studentNumber = studentNumberInput.value.replace(/\s+/g, '');
   const room = DOM.inputRoom.value.trim();
   const name = formatScreenName(DOM.inputScreenName.value);
   const number = DOM.inputScreenNumber.value.trim();
@@ -1271,15 +1292,21 @@ async function handleFormSubmit() {
     return;
   }
 
-  if (!/^[0-9]{1,3}[ก-ฮ]?$/u.test(studentNumber)) {
-    showToast('กรุณากรอกเลขที่ เช่น 8, 08, 8ก หรือ 5ข', 'error');
+  const keepsLegacyNumber = LEGACY_STUDENT_NUMBER_PATTERN.test(studentNumber)
+    && studentNumber === originalRecord?.studentNumber;
+  if (!NEW_STUDENT_NUMBER_PATTERN.test(studentNumber) && !keepsLegacyNumber) {
+    showToast('กรุณาเลือกเลขที่ 1ก–20ก หรือ 1ข–20ข', 'error');
     DOM.inputStudentNumber.focus();
     return;
   }
 
   if (!room) {
-    showToast('กรุณากรอกห้องเรียน', 'error');
+    showToast('กรุณาเลือกห้องเรียน', 'error');
     DOM.inputRoom.focus();
+    return;
+  }
+  if (!canBookRoom(room)) {
+    showToast(ROOM_UNAVAILABLE_MESSAGE, 'info');
     return;
   }
 
@@ -1291,8 +1318,8 @@ async function handleFormSubmit() {
   AppState.studentNumber = studentNumber;
   AppState.room = room;
 
-  const originalRecord = AppState.existingRecord;
-  const orderActions = [DOM.btnLookupStudent, DOM.btnReset, DOM.btnCancelEditMode, DOM.btnSubmit,
+  const orderActions = [DOM.inputStudentNumber, DOM.inputLegacyStudentNumber, DOM.inputRoom,
+    DOM.btnLookupStudent, DOM.btnReset, DOM.btnCancelEditMode, DOM.btnSubmit,
     DOM.inputSlipFile, DOM.btnReplaceSavedSlip, DOM.btnChangeSlip, DOM.btnRemoveSlip];
   AppState.isSubmitting = true;
   orderActions.forEach(button => { button.disabled = true; });
@@ -1467,9 +1494,7 @@ window.editOrderFromList = function (idx) {
   const order = AppState.orders[idx];
   if (!order) return;
   closeDatabaseModal();
-  DOM.inputStudentNumber.value = String(order.studentNumber || '');
-  DOM.inputRoom.value = normalizeRoomValue(order.room);
-  lookupStudentAndShowForm(DOM.inputStudentNumber.value, DOM.inputRoom.value);
+  lookupStudentAndShowForm(String(order.studentNumber || '').replace(/\s+/g, ''), normalizeRoomValue(order.room));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
@@ -1517,6 +1542,7 @@ function closeConfigModal() {
 function saveGasConfig() {
   const url = DOM.inputGasUrl ? DOM.inputGasUrl.value.trim() : '';
   AppState.gasUrl = url;
+  AppState.allRoomsSupported = false;
   localStorage.setItem('PURPLE_JERSEY_GAS_URL', url);
   checkGasConnection();
   closeConfigModal();

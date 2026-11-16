@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=Kanit:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Press+Start+2P&family=SF+Pro+Display:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montagu+Slab:wght@700&display=swap');
 
 /* ========================================================
    CUSTOM SPORTS FONT (Inter Miami 23-24)
@@ -9,6 +10,22 @@
   font-weight: normal;
   font-style: normal;
   font-display: swap;
+}
+
+@font-face {
+  font-family: 'Rockwell Bold';
+  src: local('Rockwell Bold'), local('Rockwell-Bold');
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* Digits from DOSIyagiBoldface by Damheo Lee. See fonts/DOSIyagi-LICENSE.txt. */
+@font-face {
+  font-family: 'DOSIyagiBoldface';
+  src: url('./fonts/DOSIyagiBoldface.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0030-0039;
 }
 
 :root {
@@ -626,15 +643,15 @@ body.size-guide-open {
 }
 
 .jersey-name {
-  font-family: 'Chakra Petch', 'Kanit', sans-serif;
+  font-family: 'Rockwell Bold', Rockwell, 'Montagu Slab', 'Kanit', serif;
   font-weight: 700;
   fill: #ffffff;
   text-anchor: middle;
 }
 
 .jersey-number {
-  font-family: 'Press Start 2P', 'Chakra Petch', monospace;
-  font-weight: 400;
+  font-family: 'DOSIyagiBoldface', 'Press Start 2P', monospace;
+  font-weight: 700;
 }
 
 .number-style-clean {

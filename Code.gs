@@ -11,14 +11,8 @@ var SHEET_NAME = "Orders";
 var DRIVE_FOLDER_NAME = "Purple Jersey Slips 2026"; // โฟลเดอร์เก็บสลิป
 var ORDER_HEADERS = ["Timestamp", "Email", "Student No.", "Room", "Screen Name", "Screen Number", "Size", "Payment Slip", "Status"];
 var LOCKED_PAYMENT_STATUSES = ["ชำระเงินแล้ว", "ชำระเงินสำเร็จ", "ตรวจสอบแล้ว", "กำลังผลิต", "จัดส่งแล้ว", "เสร็จสิ้น"];
-var ROOM_OPTIONS = [
-  "ม.1/3", "ม.1/8", "ม.1/13",
-  "ม.2/2", "ม.2/7", "ม.2/12", "ม.2/17",
-  "ม.3/6", "ม.3/11", "ม.3/16",
-  "ม.4/1", "ม.4/5", "ม.4/10", "ม.4/15",
-  "ม.5/4", "ม.5/9", "ม.5/14",
-  "ม.6/1", "ม.6/12", "ม.6/13"
-];
+var ROOM_PATTERN = /^ม\.[1-6]\/(?:[1-9]|1[0-7])$/;
+var NEW_STUDENT_NUMBER_PATTERN = /^(?:[1-9]|1[0-9]|20)[กข]$/;
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -40,7 +34,7 @@ function doPost(e) {
 
     var email = (data.email || "").toString().trim().toLowerCase();
     var studentNumber = (data.studentNumber || data.studentNo || "").toString().replace(/\s+/g, "").trim();
-    var room = (data.room || data.classRoom || "").toString().trim();
+    var room = normalizeRoomKey(data.room || data.classRoom);
     var originalStudentNumber = (data.originalStudentNumber || "").toString().replace(/\s+/g, "").trim();
     var originalRoom = (data.originalRoom || "").toString().trim();
     var name = (data.name || "").toString().trim().toUpperCase();
@@ -64,7 +58,7 @@ function doPost(e) {
       return createJsonResponse({ status: "error", message: "Jersey number must be 1-2 digits." });
     }
 
-    if (ROOM_OPTIONS.indexOf(room) < 0) {
+    if (!ROOM_PATTERN.test(room)) {
       return createJsonResponse({ status: "error", message: "Please select a valid classroom." });
     }
 
@@ -108,6 +102,10 @@ function doPost(e) {
           break;
         }
       }
+    }
+
+    if (foundRowIndex < 0 && !NEW_STUDENT_NUMBER_PATTERN.test(studentNumber)) {
+      return createJsonResponse({ status: "error", message: "Choose a student number from 1ก–20ก or 1ข–20ข." });
     }
 
     var slipOwnerKey = email || existingEmail
@@ -231,6 +229,7 @@ function doGet(e) {
         status: "ok",
         message: "Authong Athletics Official Store GAS Backend is active!",
         slipViewVersion: 1,
+        allRooms: true,
         spreadsheetId: SPREADSHEET_ID,
         timestamp: new Date().toISOString()
       });
@@ -267,6 +266,7 @@ function doGet(e) {
           return createJsonResponse({
             status: "success",
             found: true,
+            allRooms: true,
             data: {
               timestamp: values[i][columns["Timestamp"] - 1],
               studentNumber: (values[i][columns["Student No."] - 1] || "").toString(),
@@ -289,6 +289,7 @@ function doGet(e) {
       return createJsonResponse({
         status: "success",
         found: false,
+        allRooms: true,
         message: "Student record not found"
       });
     }
