@@ -103,11 +103,29 @@
         <!-- Floating Transparent Jersey Canvas -->
         <div class="jersey-stage-container w-full flex items-center justify-center py-2">
           <div id="jerseyCardWrapper" class="jersey-card-wrapper relative">
+            <svg class="absolute pointer-events-none" width="0" height="0" aria-hidden="true"
+              xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="jerseyBackFabricFade">
+                  <stop offset="0.74" stop-color="white" />
+                  <stop offset="1" stop-color="white" stop-opacity="0" />
+                </radialGradient>
+                <mask id="jerseyBackFabricMask" maskUnits="userSpaceOnUse" x="580" y="128" width="144" height="128">
+                  <ellipse cx="652" cy="192" rx="72" ry="64" fill="url(#jerseyBackFabricFade)" />
+                </mask>
+                <g id="jerseyBackBrand">
+                  <image href="./jersey-authong-back-fabric.png" x="580" y="128" width="144" height="128"
+                    mask="url(#jerseyBackFabricMask)" />
+                  <image href="./authong-logo.png" x="563" y="148" width="161" height="95" />
+                </g>
+              </defs>
+            </svg>
 
             <!-- 1. Back view: Authong lavender star design -->
             <div id="jerseyViewBackEl" class="jersey-hd-back">
               <svg id="svgJerseyBack" class="jersey-svg-overlay" viewBox="0 0 1323 1189" fill="none"
                 xmlns="http://www.w3.org/2000/svg">
+                <use href="#jerseyBackBrand" aria-hidden="true" />
                 <!-- Straight name line, matching the supplied jersey reference. -->
                 <text id="svgBackName" x="652" y="363"
                   font-weight="700" font-size="67" fill="#ffffff" letter-spacing="4" text-anchor="middle"
@@ -130,6 +148,7 @@
               <svg id="svgJerseyBoth" class="jersey-svg-overlay" viewBox="0 0 1323 1189"
                 preserveAspectRatio="xMinYMid meet" fill="none"
                 xmlns="http://www.w3.org/2000/svg">
+                <use href="#jerseyBackBrand" aria-hidden="true" />
                 <!-- Straight name line, centered over the back jersey in both-side view. -->
                 <text id="svgBothName" x="652" y="363"
                   font-weight="700" font-size="67" fill="#ffffff" letter-spacing="4" text-anchor="middle"
@@ -731,7 +750,7 @@
   </script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261116-4"></script>
+  <script src="app.js?v=20261116-5"></script>
 </body>
 
 </html>
