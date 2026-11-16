@@ -2,22 +2,23 @@
 // ⚙️ แผงตั้งค่าพิกัด & ขนาดสกรีนเสื้อ (สามารถปรับค่าที่นี่ได้โดยตรง)
 // ========================================================
 const JERSEY_CONFIG = {
+  // Midpoint between the two white seams, in pixels of the back artwork.
+  backCenterX: 652,
+
   // Back number calibrated for the Authong star jersey artwork.
   backNumber: {
-    x: 662,
-    y: 520,
-    size: 254,
-    digitWidth: 174
+    y: 524,
+    size: 256,
+    digitWidth: 175
   },
 
   // Back name is a straight line below the small shoulder monogram.
   backName: {
-    x: 662,
-    y: 360,
-    baseSize: 66,
-    maxWidth: 370,
-    top: 286,
-    bottom: 384
+    y: 363,
+    baseSize: 67,
+    maxWidth: 373,
+    top: 288,
+    bottom: 387
   }
 };
 
@@ -902,6 +903,8 @@ async function loadSavedSlip(code, openFullImage) {
 // ==========================================
 // 6. LIVE PREVIEW ENGINE (CLEAN - NO SHADOWS)
 // ==========================================
+const jerseyTextMeasure = document.createElement('canvas').getContext?.('2d');
+
 function calculateDynamicNameTypography(nameText, baseSize) {
   const len = nameText ? nameText.trim().length : 0;
   let dynamicSize = baseSize;
@@ -995,24 +998,49 @@ function renderJerseyChanges() {
   DOM.jerseyChangesList.replaceChildren(...rows);
 }
 
-function fitJerseyName(element) {
-  const { x, y, maxWidth, top, bottom } = JERSEY_CONFIG.backName;
+function getJerseyInkCenter(element, bounds) {
+  const layoutCenter = bounds.x + bounds.width / 2;
+  if (!jerseyTextMeasure) return layoutCenter;
+
+  const style = getComputedStyle(element);
+  jerseyTextMeasure.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  jerseyTextMeasure.textAlign = 'center';
+  const letterSpacing = parseFloat(style.letterSpacing) || 0;
+  const measuresSpacing = 'letterSpacing' in jerseyTextMeasure;
+  if (measuresSpacing) jerseyTextMeasure.letterSpacing = `${letterSpacing}px`;
+
+  const metrics = jerseyTextMeasure.measureText(element.textContent.replace(/\s+/g, ' '));
+  if (!metrics.width || !Number.isFinite(metrics.actualBoundingBoxLeft) ||
+      !Number.isFinite(metrics.actualBoundingBoxRight)) return layoutCenter;
+
+  // SVG stretches the number to textLength; apply the same scale to the ink offset.
+  const targetWidth = Number(element.getAttribute('textLength'));
+  const widthScale = targetWidth ? targetWidth / metrics.width : 1;
+  const inkOffset = (metrics.actualBoundingBoxRight - metrics.actualBoundingBoxLeft) / 2;
+  const spacingOffset = measuresSpacing ? 0 : -letterSpacing / 2;
+  return JERSEY_CONFIG.backCenterX + (inkOffset + spacingOffset) * widthScale;
+}
+
+function centerJerseyText(element, { y, maxWidth, top, bottom }) {
+  if (!element?.textContent) return;
   const bounds = element.getBBox();
   if (!bounds.width || !bounds.height) return;
-  const halfWidth = Math.max(x - bounds.x, bounds.x + bounds.width - x);
-  const ascent = y - bounds.y;
-  const descent = bounds.y + bounds.height - y;
-  const padding = 4; // Allow for glyph overhang and SVG layout rounding.
-  const scale = Math.min(
-    1,
-    (maxWidth / 2 - padding) / Math.max(1, halfWidth),
-    (y - top - padding) / Math.max(1, ascent),
-    (bottom - y - padding) / Math.max(1, descent)
-  );
-  if (scale < 1) {
-    // Scale the measured glyphs about their anchor without changing their shape or spacing.
-    element.setAttribute('transform', `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})`);
+
+  let scale = 1;
+  if (maxWidth) {
+    const padding = 4; // Allow for glyph overhang and SVG layout rounding.
+    scale = Math.min(
+      1,
+      (maxWidth - 2 * padding) / bounds.width,
+      (y - top - padding) / Math.max(1, y - bounds.y),
+      (bottom - y - padding) / Math.max(1, bounds.y + bounds.height - y)
+    );
   }
+
+  const textCenter = getJerseyInkCenter(element, bounds);
+  const shiftX = JERSEY_CONFIG.backCenterX - textCenter * scale;
+  const shiftY = y * (1 - scale);
+  element.setAttribute('transform', `translate(${shiftX} ${shiftY}) scale(${scale})`);
 }
 
 function renderJerseyPrint() {
@@ -1022,23 +1050,20 @@ function renderJerseyPrint() {
   const displayName = name || (isEditing ? '' : 'YOUR NAME');
   const displayNumber = number || (isEditing ? '' : '10');
 
-  const { backNumber, backName } = JERSEY_CONFIG;
+  const { backCenterX, backNumber, backName } = JERSEY_CONFIG;
   const numberWidth = String(Math.min(displayNumber.length, 2) * backNumber.digitWidth);
 
   // Start with the preferred typography and measure the visible SVG in jersey coordinates.
   const { dynamicSize, letterSpacing } = calculateDynamicNameTypography(name, backName.baseSize);
-  const visibleName = AppState.viewSide === 'both' ? DOM.svgBothName
-    : AppState.viewSide === 'back' ? DOM.svgBackName : null;
 
   const updateNameText = (element, fontSize) => {
     if (!element) return;
     element.textContent = displayName;
-    element.setAttribute('x', backName.x.toString());
+    element.setAttribute('x', backCenterX.toString());
     element.setAttribute('y', backName.y.toString());
     element.setAttribute('font-size', fontSize.toString());
     element.setAttribute('letter-spacing', letterSpacing);
     element.removeAttribute('transform');
-    if (element === visibleName && displayName) fitJerseyName(element);
   };
 
   updateNameText(DOM.svgBackName, dynamicSize);
@@ -1047,10 +1072,17 @@ function renderJerseyPrint() {
   for (const element of [DOM.svgBackNumber, DOM.svgBothNumber]) {
     if (!element) continue;
     element.setAttribute('font-size', backNumber.size.toString());
-    element.setAttribute('x', backNumber.x.toString());
+    element.setAttribute('x', backCenterX.toString());
     element.setAttribute('y', backNumber.y.toString());
     element.setAttribute('textLength', numberWidth);
     element.textContent = displayNumber;
+    element.removeAttribute('transform');
+  }
+
+  if (AppState.viewSide !== 'front') {
+    const showBoth = AppState.viewSide === 'both';
+    centerJerseyText(showBoth ? DOM.svgBothName : DOM.svgBackName, backName);
+    centerJerseyText(showBoth ? DOM.svgBothNumber : DOM.svgBackNumber, backNumber);
   }
 }
 
