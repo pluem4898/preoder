@@ -6,15 +6,18 @@ const JERSEY_CONFIG = {
   backNumber: {
     x: 662,
     y: 520,
-    size: 240,
-    digitWidth: 164
+    size: 254,
+    digitWidth: 174
   },
 
   // Back name is a straight line below the small shoulder monogram.
   backName: {
     x: 662,
     y: 360,
-    baseSize: 66
+    baseSize: 66,
+    maxWidth: 370,
+    top: 286,
+    bottom: 384
   }
 };
 
@@ -194,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   initJerseyDock();
   updateLivePreview();
+  document.fonts?.addEventListener('loadingdone', renderJerseyPrint);
   checkGasConnection();
   openSlipFromLink();
   // Removed: loadOrdersDatabase() - No longer using LocalStorage
@@ -991,7 +995,27 @@ function renderJerseyChanges() {
   DOM.jerseyChangesList.replaceChildren(...rows);
 }
 
-function updateLivePreview() {
+function fitJerseyName(element) {
+  const { x, y, maxWidth, top, bottom } = JERSEY_CONFIG.backName;
+  const bounds = element.getBBox();
+  if (!bounds.width || !bounds.height) return;
+  const halfWidth = Math.max(x - bounds.x, bounds.x + bounds.width - x);
+  const ascent = y - bounds.y;
+  const descent = bounds.y + bounds.height - y;
+  const padding = 4; // Allow for glyph overhang and SVG layout rounding.
+  const scale = Math.min(
+    1,
+    (maxWidth / 2 - padding) / Math.max(1, halfWidth),
+    (y - top - padding) / Math.max(1, ascent),
+    (bottom - y - padding) / Math.max(1, descent)
+  );
+  if (scale < 1) {
+    // Scale the measured glyphs about their anchor without changing their shape or spacing.
+    element.setAttribute('transform', `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})`);
+  }
+}
+
+function renderJerseyPrint() {
   const name = formatScreenName(AppState.screenName);
   const number = String(AppState.screenNumber ?? '').trim();
   const isEditing = AppState.mode === 'edit';
@@ -999,10 +1023,12 @@ function updateLivePreview() {
   const displayNumber = number || (isEditing ? '' : '10');
 
   const { backNumber, backName } = JERSEY_CONFIG;
-  const numberWidth = String(displayNumber.length * backNumber.digitWidth);
+  const numberWidth = String(Math.min(displayNumber.length, 2) * backNumber.digitWidth);
 
-  // 1. Keep the name horizontal and scale it to fit the jersey.
+  // Start with the preferred typography and measure the visible SVG in jersey coordinates.
   const { dynamicSize, letterSpacing } = calculateDynamicNameTypography(name, backName.baseSize);
+  const visibleName = AppState.viewSide === 'both' ? DOM.svgBothName
+    : AppState.viewSide === 'back' ? DOM.svgBackName : null;
 
   const updateNameText = (element, fontSize) => {
     if (!element) return;
@@ -1011,6 +1037,8 @@ function updateLivePreview() {
     element.setAttribute('y', backName.y.toString());
     element.setAttribute('font-size', fontSize.toString());
     element.setAttribute('letter-spacing', letterSpacing);
+    element.removeAttribute('transform');
+    if (element === visibleName && displayName) fitJerseyName(element);
   };
 
   updateNameText(DOM.svgBackName, dynamicSize);
@@ -1024,7 +1052,10 @@ function updateLivePreview() {
     element.setAttribute('textLength', numberWidth);
     element.textContent = displayNumber;
   }
+}
 
+function updateLivePreview() {
+  renderJerseyPrint();
   renderJerseyChanges();
 }
 
@@ -1044,6 +1075,7 @@ function setJerseyView(side) {
     button.setAttribute('aria-pressed', String(selected));
   }
   DOM.jerseyCardWrapper.classList.toggle('is-dual-view', side === 'both');
+  renderJerseyPrint();
 }
 
 // ==========================================
