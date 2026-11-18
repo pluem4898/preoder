@@ -208,7 +208,20 @@ function setupNewOrderSheets() {
   try {
     ensureWorkbook_();
     var migrated = migrateLegacyOrders_();
-    return 'พร้อมใช้งาน: CUSTOMERS, ORDERS_ALL, PAYMENTS, SUMMARY และ 4 คอลเลกชัน · ย้ายข้อมูลเดิม ' + migrated + ' รายการ';
+    return 'พร้อมใช้งาน: CUSTOMERS, ORDERS_ALL, PAYMENTS, SUMMARY และ 4 คอลเลกชัน · นำเข้า/ซิงก์ข้อมูลเดิม ' + migrated + ' รายการ';
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Run this when you only want to synchronize legacy rows into the new tabs.
+// It keeps the original Drive slip files and reuses their IDs and URLs.
+function runLegacyMigrationOnly() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    ensureWorkbook_();
+    return 'ซิงก์ข้อมูลเดิมแล้ว ' + migrateLegacyOrders_() + ' รายการ (เก็บสลิปเดิมไว้ ไม่อัปโหลดซ้ำ)';
   } finally {
     lock.releaseLock();
   }
@@ -553,6 +566,26 @@ function appendPayment_(order, fileName) {
   sheet.getRange(rowIndex, 4).setNumberFormat('#,##0.00');
 }
 
+function upsertLegacyPayment_(order, sourceTimestamp) {
+  var sheet = getSheet_('PAYMENTS');
+  var existingRow = findRowByValue_(sheet, 3, order.orderId);
+  var rowIndex = existingRow || sheet.getLastRow() + 1;
+  var paymentId = order.orderId + '-LEGACY';
+  var status = order.paymentStatus || 'รอตรวจสอบสลิป';
+  var row = [sourceTimestamp || order.createdAt, paymentId, order.orderId,
+    Number(order.unitPrice) * Number(order.quantity), order.slipFileId, '',
+    'สลิปจากรายการเดิม', status, status === 'ผ่าน' ? (sourceTimestamp || order.createdAt) : '',
+    status === 'ผ่าน' ? 'นำเข้าจากข้อมูลเดิม' : ''];
+  sheet.getRange(rowIndex, 1, 1, PAYMENT_HEADERS.length).setValues([row]);
+  if (order.slipLink) {
+    sheet.getRange(rowIndex, 6).setFormula('=HYPERLINK("' + order.slipLink + '","เปิดสลิป")');
+  } else {
+    sheet.getRange(rowIndex, 6).setValue('');
+  }
+  sheet.getRange(rowIndex, 4).setNumberFormat('#,##0.00');
+  return rowIndex;
+}
+
 function removeOrderFromCategory_(category, orderId) {
   if (CATEGORY_NAMES.indexOf(category) < 0) return;
   var sheet = getSheet_(category);
@@ -661,7 +694,6 @@ function migrateLegacyOrders_() {
     if (!number || !room) continue;
     var originalOrderId = String(r[(m['Order ID'] || 0) - 1] || '').trim();
     var orderId = originalOrderId || 'LEGACY-' + String(i + 1).padStart(5, '0');
-    if (findOrderById_(orderId)) continue;
     var customerId = makeCustomerId_('student', number, room, '');
     var timestamp = String(r[(m.Timestamp || 0) - 1] || '');
     var customerName = '';
@@ -713,9 +745,11 @@ function migrateLegacyOrders_() {
       recipient: '', address: '', postcode: '', slipFileId: slipId, slipLink: slipLink,
       paymentStatus: paymentStatus, orderStatus: orderStatus, adminNote: ''
     };
+    // Upsert every related tab even when the order already exists. This makes
+    // the migration recover safely after a timeout or a partial earlier run.
     writeOrder_(getSheet_('ORDERS_ALL'), order);
     writeCategoryOrder_(getSheet_(category), order);
-    if (slipId) appendPayment_(order, 'สลิปจากรายการเดิม');
+    if (slipId) upsertLegacyPayment_(order, timestamp);
     migrated++;
   }
   return migrated;

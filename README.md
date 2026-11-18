@@ -19,13 +19,13 @@
 ## ติดตั้ง Google Apps Script
 
 1. เปิด Apps Script ที่ผูกกับสเปรดชีตเดิม แล้วแทนเนื้อหา Code.gs ด้วยไฟล์ใน repo
-2. เลือก setupNewOrderSheets แล้วกด Run เพื่อสร้างชีตและย้ายรายการเดิมจาก Orders, LEGACY_ORDERS_ARCHIVE หรือชีตเก่า `ชีต1` (ตามหัวตาราง) ระบบจะแสดงจำนวนรายการที่ย้าย และเก็บชีตต้นทางไว้ ไม่ลบข้อมูลเดิม การรันซ้ำจะข้าม Order ID ที่ย้ายแล้ว
+2. เลือก setupNewOrderSheets แล้วกด Run เพื่อสร้างชีตและซิงก์รายการเดิมจาก Orders, LEGACY_ORDERS_ARCHIVE หรือชีตเก่า `ชีต1` (ตามหัวตาราง) หรือเลือก `runLegacyMigrationOnly` หากต้องการซิงก์ข้อมูลอย่างเดียว ระบบจะซิงก์ ORDERS_ALL, CUSTOMERS, แท็บคอลเลกชัน และ PAYMENTS ให้ครบ การรันซ้ำจะอัปเดตรายการเดิมตาม Order ID โดยไม่สร้างออเดอร์หรือสลิปซ้ำ
 3. Deploy เป็น Web app โดยให้ Execute as เป็นบัญชีเจ้าของสเปรดชีต และกำหนดการเข้าถึงให้ผู้สั่งจองเปิดได้
 4. คัดลอก Web app URL ไปใส่ช่องตั้งค่า Google Sheets ในหน้าเว็บ หรือในไฟล์ config.js
 5. ตรวจรายการสลิปจากแท็บคอลเลกชัน แล้วแก้ Payment Status / Order Status ได้จากชีตนั้น
 6. ตั้งค่า OAuth Web Client ID เดียวกันใน config.js (`googleClientId`) และตัวแปร `GOOGLE_CLIENT_ID` ด้านบนของ Code.gs ก่อน Deploy เวอร์ชันใหม่ ระบบจะใช้ Google `sub` แบบแฮชเป็น Customer ID และไม่นำอีเมลไปเก็บ
 
-ชีตเก่า `ชีต1` เก็บข้อมูล Timestamp, Student No., Room, Screen Name, Screen Number, Size, Payment Slip และ Status ระบบนำข้อมูลไปยัง ORDERS_ALL, CUSTOMERS, ORIGINAL และ PAYMENTS โดยแปลงสถานะเดิมให้ตรงกับสถานะตรวจสลิป และรักษาเบอร์เสื้อที่มีเลขศูนย์นำหน้าเป็นข้อความ ต้นทางยังอยู่ครบ หน้าเว็บโหลดรายการผู้สั่งไว้ล่วงหน้า และใช้ข้อมูลแคชเมื่อเปิดแต่ละคอลเลกชัน
+ชีตเก่า `ชีต1` เก็บข้อมูล Timestamp, Student No., Room, Screen Name, Screen Number, Size, Payment Slip และ Status ระบบนำข้อมูลไปยัง ORDERS_ALL, CUSTOMERS, แท็บคอลเลกชัน และ PAYMENTS โดยคงลิงก์/รหัสไฟล์สลิปใน Google Drive เดิมไว้ ไม่ดาวน์โหลดหรืออัปโหลดสลิปซ้ำ แปลงสถานะเดิมให้ตรงกับสถานะตรวจสลิป และรักษาเบอร์เสื้อที่มีเลขศูนย์นำหน้าเป็นข้อความ ต้นทางยังอยู่ครบ หน้าเว็บโหลดรายการผู้สั่งไว้ล่วงหน้า และใช้ข้อมูลแคชเมื่อเปิดแต่ละคอลเลกชัน
 
 ## Google Sign-In
 
