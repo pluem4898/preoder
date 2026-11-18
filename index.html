@@ -10,6 +10,7 @@
   <link rel="icon" type="image/png" href="./authong-favicon.png?v=20261115-3">
   <link rel="preload" as="image" href="./jersey_authong_back.webp" type="image/webp" fetchpriority="high">
   <link rel="preload" as="font" href="./fonts/DOSIyagiBoldface.woff2" type="font/woff2" crossorigin>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="window.dispatchEvent(new Event('authong-gsi-ready'))"></script>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -38,7 +39,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261116-6">
+  <link rel="stylesheet" href="style.css?v=20261119-2">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -50,60 +51,192 @@
   </div>
 
   <!-- ================= FLOATING APPLE GLASS HEADER ================= -->
-  <header class="sticky top-4 z-40 px-4 sm:px-6 max-w-5xl mx-auto w-full">
-    <div class="apple-glass-nav relative px-5 py-3 flex items-center justify-between">
-
-      <!-- Brand Minimal Logo -->
-      <a href="#" class="flex items-center space-x-2.5 group">
-        <img src="./authong-logo.png" class="navbar-brand-logo" alt="Authong logo">
+  <header id="siteHeader" class="site-header sticky top-3 z-40 px-3 sm:px-6 max-w-6xl mx-auto w-full hidden">
+    <div class="apple-glass-nav relative px-4 sm:px-5 py-3 flex items-center justify-between">
+      <a href="#" class="flex items-center space-x-2.5 group" aria-label="Authong home">
+        <img src="./web-logo.png" class="navbar-brand-logo" alt="Authong logo">
       </a>
-
+      <div class="header-actions">
+        <div id="jerseyViewControls" class="apple-segmented-control header-view-controls" role="group" aria-label="มุมมองเสื้อ">
+          <button type="button" id="btnViewBack" class="apple-segmented-btn active" aria-pressed="true">ด้านหลัง</button>
+          <button type="button" id="btnViewFront" class="apple-segmented-btn" aria-pressed="false">ด้านหน้า</button>
+          <button type="button" id="btnViewBoth" class="apple-segmented-btn hidden sm:inline-block" aria-pressed="false">คู่หน้า-หลัง</button>
+        </div>
+        <button type="button" id="btnOpenCustomerOrders" class="header-cart-button" aria-label="รายการออเดอร์">
+          <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
+          <span id="customerOrderCount" class="header-cart-count">0</span>
+        </button>
+      </div>
+    </div>
+    <div class="customer-context-row">
+      <div id="headerCustomerChip" class="header-customer-chip hidden" aria-live="polite"></div>
     </div>
   </header>
 
   <!-- ================= MAIN STUDIO & CONFIGURATOR ================= -->
-  <main class="flex-grow max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 relative z-10">
+  <main class="flex-grow max-w-6xl w-full mx-auto px-3 sm:px-6 py-5 sm:py-8 space-y-6 relative z-10">
 
-    <!-- Mode Status Alert Banner (Shown when a student record matches) -->
-    <div id="modeStatusBanner"
-      class="apple-glass-card p-4 border border-amber-300/80 bg-amber-50/80 text-amber-900 flex items-center justify-between gap-4 hidden transition-all duration-300">
-      <div class="flex items-center space-x-3">
-        <div class="w-8 h-8 rounded-xl bg-amber-200 text-amber-800 flex items-center justify-center text-sm shrink-0">
-          <i class="fa-solid fa-pen-to-square"></i>
+    <section id="identityPanel" class="storefront-panel who-screen">
+      <h1 class="who-title">WHO ARE YOU?</h1>
+      <div class="who-card">
+        <p class="who-prompt">เลือกประเภทผู้สั่งจอง</p>
+        <div class="identity-type-grid" role="group" aria-label="ประเภทผู้สั่งจอง">
+          <button type="button" class="identity-type-card" data-customer-type="student" aria-pressed="false">
+            <span class="identity-type-icon"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
+            <span><strong>นักเรียน</strong><small>ใช้เลขที่และห้องเรียน</small></span>
+            <i class="fa-solid fa-arrow-right identity-type-arrow" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="identity-type-card" data-customer-type="general" aria-pressed="false">
+            <span class="identity-type-icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+            <span><strong>บุคคลทั่วไป</strong><small>ลงชื่อเข้าใช้ Google</small></span>
+            <i class="fa-solid fa-arrow-right identity-type-arrow" aria-hidden="true"></i>
+          </button>
         </div>
-        <div>
-          <span class="text-xs font-bold text-amber-900 block">พบประวัติการสั่งจองเดิม (โหมดแก้ไข)</span>
-          <p class="text-[11px] text-amber-800/90">ระบบดึงข้อมูลเสื้อของคุณมาแล้ว สามารถแก้ไขชื่อ เบอร์ หรือไซส์
-            แล้วกดบันทึกได้ทันที</p>
-          <div id="paymentStatusDisplay" class="mt-2 hidden">
-            <span class="text-xs font-semibold text-amber-900 mr-2">สถานะการชำระเงิน:</span>
-            <span id="paymentStatusText" class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-200/70 text-amber-900"></span>
+
+        <div id="identityFields" class="identity-fields hidden">
+        <div id="studentIdentityFields" class="identity-input-grid hidden">
+          <div class="identity-input-group">
+            <label for="identityStudentNumber">เลขที่</label>
+            <select id="identityStudentNumber" class="apple-glass-input w-full px-3.5 py-3">
+              <option value="">เลือกเลขที่</option>
+              <optgroup label="ก" data-student-suffix="ก"></optgroup>
+              <optgroup label="ข" data-student-suffix="ข"></optgroup>
+            </select>
+          </div>
+          <div class="identity-input-group">
+            <label for="identityRoom">ห้อง</label>
+            <select id="identityRoom" class="apple-glass-input w-full px-3.5 py-3"><option value="">เลือกห้องเรียน</option></select>
+          </div>
+        </div>
+
+        <div id="googleLoginPanel" class="google-login-panel hidden">
+          <div id="googleSignInButton" class="google-sign-in-button"></div>
+          <span id="googleLoginStatus" class="sr-only" role="status" aria-live="polite"></span>
+        </div>
+
+        <div id="generalIdentityFields" class="identity-input-grid hidden">
+          <div class="identity-input-group">
+            <label for="identityCustomerName">ชื่อ-นามสกุล</label>
+            <input id="identityCustomerName" type="text" maxlength="100" autocomplete="name" placeholder="ชื่อจากบัญชี Google" class="apple-glass-input w-full px-3.5 py-3">
+          </div>
+          <div class="identity-input-group">
+            <label for="identityCustomerPhone">เบอร์โทรศัพท์</label>
+            <input id="identityCustomerPhone" type="tel" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="08X-XXX-XXXX" class="apple-glass-input w-full px-3.5 py-3">
+          </div>
+        </div>
+
+        <div id="deliveryChoiceGroup" class="identity-input-group delivery-choice-group">
+          <label for="deliveryMethod">รับเสื้อแบบไหน</label>
+          <select id="deliveryMethod" class="apple-glass-input w-full px-3.5 py-3">
+            <option value="school_pickup">รับที่โรงเรียน</option>
+            <option value="shipping">จัดส่ง</option>
+          </select>
+        </div>
+
+        <div id="shippingFields" class="identity-input-grid hidden">
+          <div class="identity-input-group">
+            <label for="shippingPostcode">รหัสไปรษณีย์</label>
+            <input id="shippingPostcode" type="text" inputmode="numeric" maxlength="5" autocomplete="shipping postal-code" placeholder="เช่น 10110" class="apple-glass-input w-full px-3.5 py-3">
+          </div>
+          <div class="identity-input-group identity-span-two">
+            <label for="shippingAddress">ที่อยู่จัดส่ง</label>
+            <textarea id="shippingAddress" rows="3" maxlength="500" autocomplete="shipping street-address" placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต จังหวัด" class="apple-glass-input w-full px-3.5 py-3"></textarea>
+          </div>
+        </div>
+        <p id="deliveryDisclaimer" class="identity-shipping-note hidden">ยอดเสื้อยังไม่รวมค่าจัดส่ง</p>
+
+        </div>
+        <button type="button" id="btnContinueIdentity" class="identity-continue">
+          ไปต่อ <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
+      </div>
+    </section>
+
+    <section id="collectionPanel" class="storefront-panel home-panel hidden" aria-labelledby="collectionTitle">
+      <h2 id="collectionTitle" class="sr-only">คอลเลกชันเสื้อ</h2>
+      <div class="home-hero" aria-label="ภาพเปิดพรีออเดอร์ Authong Athletics 2026">
+        <img class="home-hero-image" src="./web-hero-collage.jpg" alt="ภาพประชาสัมพันธ์พรีออเดอร์เสื้อ Authong Athletics" fetchpriority="high">
+      </div>
+      <p id="collectionCustomerSummary" class="sr-only"></p>
+      <div class="collection-grid">
+        <button type="button" class="collection-card collection-original" data-product-category="ORIGINAL">
+          <span class="collection-copy"><small>ORIGINAL</small><strong>Collection</strong></span>
+          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"></span>
+          <span class="collection-price"><b>279 ฿</b><i data-collection-action>PREORDER</i></span>
+        </button>
+        <button type="button" class="collection-card" data-product-category="FOOTBALL" disabled aria-disabled="true" title="เร็ว ๆ นี้">
+          <span class="collection-copy"><small>FOOTBALL</small><strong>Collection</strong></span>
+          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"><b class="collection-art-question">?</b></span>
+          <span class="collection-price"><b>2?? ฿</b><i data-collection-action>SOON</i></span>
+        </button>
+        <button type="button" class="collection-card" data-product-category="BASKETBALL" disabled aria-disabled="true" title="เร็ว ๆ นี้">
+          <span class="collection-copy"><small>BASKETBALL</small><strong>Collection</strong></span>
+          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"><b class="collection-art-question">?</b></span>
+          <span class="collection-price"><b>2?? ฿</b><i data-collection-action>SOON</i></span>
+        </button>
+        <button type="button" class="collection-card" data-product-category="AUHISTORY" disabled aria-disabled="true" title="เร็ว ๆ นี้">
+          <span class="collection-copy"><small>AUHISTORY</small><strong>Collection</strong></span>
+          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"><b class="collection-art-question">?</b></span>
+          <span class="collection-price"><b>2?? ฿</b><i data-collection-action>SOON</i></span>
+        </button>
+      </div>
+    </section>
+
+    <section id="customerOrdersPanel" class="customer-orders-panel hidden" aria-labelledby="customerOrdersTitle">
+      <div class="customer-orders-heading">
+        <div><h2 id="customerOrdersTitle">รายการออเดอร์</h2></div>
+        <button type="button" id="btnBackToHome" class="change-customer-button">กลับหน้าหลัก</button>
+      </div>
+      <div id="ordersCustomerSummary" class="orders-customer-summary" aria-label="ข้อมูลผู้ใช้">
+        <span class="orders-customer-avatar" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+        <span class="orders-customer-copy"><small id="ordersCustomerType"></small><strong id="ordersCustomerPrimary"></strong><span id="ordersCustomerSecondary"></span></span>
+        <button type="button" id="btnLogoutCustomer" class="orders-customer-logout">ออก</button>
+        <div id="ordersDeliveryEditor" class="orders-delivery-editor hidden">
+          <button type="button" id="btnEditDelivery" class="orders-delivery-toggle">แก้ไขข้อมูลจัดส่ง</button>
+          <div id="ordersDeliveryFields" class="orders-delivery-fields hidden">
+            <label for="ordersDeliveryMethod">รับเสื้อแบบไหน</label>
+            <select id="ordersDeliveryMethod" class="apple-glass-input w-full px-3.5 py-3">
+              <option value="school_pickup">รับที่โรงเรียน</option>
+              <option value="shipping">จัดส่ง</option>
+            </select>
+            <div id="ordersShippingFields" class="orders-shipping-fields hidden">
+              <div class="identity-input-group">
+                <label for="ordersShippingPostcode">รหัสไปรษณีย์</label>
+                <input id="ordersShippingPostcode" type="text" inputmode="numeric" maxlength="5" autocomplete="shipping postal-code" placeholder="เช่น 10110" class="apple-glass-input w-full px-3.5 py-3">
+              </div>
+              <div class="identity-input-group">
+                <label for="ordersShippingAddress">ที่อยู่จัดส่ง</label>
+                <textarea id="ordersShippingAddress" rows="3" maxlength="500" autocomplete="shipping street-address" placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต จังหวัด" class="apple-glass-input w-full px-3.5 py-3"></textarea>
+              </div>
+            </div>
+            <div class="orders-delivery-actions">
+              <button type="button" id="btnCancelDeliveryEdit" class="change-customer-button">ยกเลิก</button>
+              <button type="button" id="btnSaveDeliveryEdit" class="orders-delivery-save">บันทึกข้อมูลจัดส่ง</button>
+            </div>
           </div>
         </div>
       </div>
-      <button type="button" id="btnCancelEditMode"
-        class="shrink-0 whitespace-nowrap text-xs font-semibold text-amber-800 hover:text-amber-950 px-2.5 py-1 rounded-lg bg-amber-200/70 cursor-pointer">
-        สร้างใหม่ &times;
-      </button>
-    </div>
+      <div id="customerOrderList" class="customer-order-list" aria-live="polite"></div>
+    </section>
 
+    <section id="orderStudio" class="order-studio-page hidden">
+
+    <div class="order-step-row">
+      <button type="button" id="btnBackToCollection" class="apple-btn-secondary px-3.5 py-2.5 text-xs">กลับเลือกคอลเลกชัน</button>
+    </div>
     <!-- 2-COLUMN STUDIO LAYOUT -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
       <!-- ================= LEFT: PURE TRANSPARENT PRODUCT STAGE ================= -->
       <div class="jersey-preview-column lg:col-span-6 flex flex-col items-center justify-center space-y-4">
 
-        <!-- View mode controls -->
-        <div id="jerseyViewControlRow" class="w-full flex items-center justify-between px-2 mb-2">
-          <div id="jerseyViewControls" class="apple-segmented-control" role="group" aria-label="มุมมองเสื้อ">
-            <button type="button" id="btnViewBack" class="apple-segmented-btn active" aria-pressed="true">ด้านหลัง</button>
-            <button type="button" id="btnViewFront" class="apple-segmented-btn" aria-pressed="false">ด้านหน้า</button>
-            <button type="button" id="btnViewBoth" class="apple-segmented-btn hidden sm:inline-block" aria-pressed="false">คู่หน้า-หลัง</button>
-          </div>
-        </div>
-
         <!-- Floating Transparent Jersey Canvas -->
         <div class="jersey-stage-container w-full flex items-center justify-center py-2">
+          <div id="collectionArtworkPlaceholder" class="collection-artwork-placeholder hidden">
+            <span class="collection-artwork-mark"><i class="fa-solid fa-shirt" aria-hidden="true"></i></span>
+            <strong id="collectionArtworkTitle">FOOTBALL</strong>
+            <span>ภาพเสื้อคอลเลกชันนี้ยังไม่ได้เพิ่ม</span>
+          </div>
           <div id="jerseyCardWrapper" class="jersey-card-wrapper relative">
             <p id="jerseyArtworkStatus" class="jersey-artwork-status" role="status">กำลังโหลดภาพเสื้อ…</p>
             <svg class="absolute pointer-events-none" width="0" height="0" aria-hidden="true"
@@ -119,7 +252,7 @@
                 <g id="jerseyBackBrand">
                   <image href="./jersey-authong-back-fabric.png" x="580" y="128" width="144" height="128"
                     mask="url(#jerseyBackFabricMask)" />
-                  <image href="./authong-logo.png" x="563" y="148" width="161" height="95" />
+                  <image href="./web-logo.png" x="563" y="148" width="161" height="95" />
                 </g>
               </defs>
             </svg>
@@ -178,9 +311,9 @@
           <!-- Header Title & Price -->
           <div class="flex items-baseline justify-between border-b border-slate-200/60 pb-3">
             <div>
-              <h1 class="text-xl font-bold tracking-tight text-purple-700" aria-label="เสื้อสี">
+              <h1 class="text-xl font-bold tracking-tight text-purple-700" aria-label="คอลเลกชันเสื้อ">
                 <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
-                <span class="sr-only">เสื้อสี</span>
+                <span id="currentCollectionLabel">ORIGINAL</span>
               </h1>
             </div>
             <div class="text-right">
@@ -189,7 +322,7 @@
           </div>
 
           <!-- Student information is the order lookup key. -->
-          <div class="space-y-2">
+          <div class="space-y-2 legacy-identity-block">
             <div>
               <h2 class="text-xs font-bold text-slate-800">ข้อมูลนักเรียน</h2>
               <p class="text-[11px] text-slate-500">เลือกเลขที่และห้องเพื่อค้นหาหรือเริ่มสั่งจอง</p>
@@ -337,7 +470,7 @@
                   <i class="fa-solid fa-hourglass-half mr-1"></i>รอตรวจสอบสลิป
                 </span>
                 <span class="shrink-0 whitespace-nowrap text-[10px] font-bold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded-full">
-                  ยอดโอน <span data-jersey-price></span>
+                  ยอดโอน <span data-total-price>฿279</span>
                 </span>
               </div>
             </div>
@@ -474,6 +607,8 @@
       </div>
 
     </div>
+
+    </section>
 
   </main>
 
@@ -741,21 +876,13 @@
     </div>
   </dialog>
 
-  <!-- Configuration (optional - for security) -->
-  <script>
-    // Try to load config.js if exists (for local development)
-    (function() {
-      var script = document.createElement('script');
-      script.src = 'config.js';
-      script.onerror = function() {
-        console.log('[CONFIG] config.js not found - using default URL');
-      };
-      document.head.appendChild(script);
-    })();
-  </script>
+  <!-- Public fallback config is tracked; config.js can override it locally. -->
+  <script src="config.example.js"></script>
+  <script src="config.js" onerror="console.info('[CONFIG] config.js not found')"></script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261116-6"></script>
+  <script src="app.js?v=20261119-2"></script>
+  <script src="storefront.js?v=20261119-1"></script>
 </body>
 
 </html>

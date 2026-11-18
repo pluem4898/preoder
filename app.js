@@ -26,6 +26,12 @@ const JERSEY_CONFIG = {
 // 1. APPLICATION STATE
 // ==========================================
 const JERSEY_PRICE = 279;
+const APP_CONFIG = window.CONFIG || {};
+function createOrderId() {
+  const suffix = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
+    .replace(/-/g, '').slice(0, 12).toUpperCase();
+  return `AT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${suffix}`;
+}
 const NEW_STUDENT_NUMBER_PATTERN = /^(?:[1-9]|1[0-9]|20)[กข]$/u;
 const LEGACY_STUDENT_NUMBER_PATTERN = /^[0-9]{1,3}[ก-ฮ]?$/u;
 // These rooms also work with Apps Script deployments that predate the expanded list.
@@ -41,6 +47,10 @@ const ROOM_UNAVAILABLE_MESSAGE = 'ห้องนี้จะเปิดให�
 
 const AppState = {
   mode: 'new', // 'new' | 'edit'
+  customer: null,
+  category: 'ORIGINAL',
+  quantity: 1,
+  pendingOrderId: '',
   viewSide: 'back', // 'back' | 'front' | 'both'
   studentNumber: '',
   room: '',
@@ -56,12 +66,13 @@ const AppState = {
   slipChanged: false,
   newSlipCode: '',
   isSubmitting: false,
-  gasUrl: (typeof CONFIG !== 'undefined' && CONFIG.gasUrl) 
-    ? CONFIG.gasUrl 
-    : (localStorage.getItem('PURPLE_JERSEY_GAS_URL') || 'https://script.google.com/macros/s/AKfycby4uoyfn-QCbTk2BqZnzb1ZOt54AjAXMe5y0ahMKzFj7MZZQzNeTe8PAcHg5SrynOzhAQ/exec'),
+  gasUrl: APP_CONFIG.gasUrl
+    || (['localhost', '127.0.0.1'].includes(location.hostname) ? `${location.origin}/gas` : localStorage.getItem('PURPLE_JERSEY_GAS_URL') || ''),
+  googleClientId: APP_CONFIG.googleClientId || '',
   spreadsheetId: '1WOI_8VSHi_6FIaifxPNuX7hTHEElSVKeR8InFHSQZLw',
   existingRecord: null,
   savedJerseyChanges: [],
+  customerOrders: [],
   orders: []
 };
 
@@ -72,6 +83,11 @@ const DEFAULT_DEMO_ORDERS = [];
 // 2. DOM ELEMENT REFERENCES
 // ==========================================
 const DOM = {
+  identityStudentNumber: document.getElementById('identityStudentNumber'),
+  identityRoom: document.getElementById('identityRoom'),
+  inputQuantity: document.getElementById('inputQuantity'),
+  currentCollectionLabel: document.getElementById('currentCollectionLabel'),
+  orderTotalDisplay: document.getElementById('orderTotalDisplay'),
   // Form Inputs & Buttons
   formContentSection: document.getElementById('formContentSection'),
   submitButtonSection: document.getElementById('submitButtonSection'),
@@ -99,11 +115,6 @@ const DOM = {
   jerseyChangeRow: document.getElementById('jerseyChangeRow'),
 
   // Mode Banner
-  modeStatusBanner: document.getElementById('modeStatusBanner'),
-  btnCancelEditMode: document.getElementById('btnCancelEditMode'),
-  paymentStatusDisplay: document.getElementById('paymentStatusDisplay'),
-  paymentStatusText: document.getElementById('paymentStatusText'),
-
   // Order Status Display (Read-only)
   paymentStatusSection: document.getElementById('paymentStatusSection'),
   orderStatusBadge: document.getElementById('orderStatusBadge'),
@@ -203,6 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-jersey-price]').forEach(label => {
     label.textContent = `฿${JERSEY_PRICE}`;
   });
+  updateOrderTotals();
   initStudentOptions();
   bindEvents();
   initJerseyDock();
@@ -215,21 +227,25 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initStudentOptions() {
-  for (const group of DOM.inputStudentNumber.querySelectorAll('optgroup')) {
-    for (let number = 1; number <= 20; number++) {
-      const studentNumber = number + group.dataset.studentSuffix;
-      group.append(new Option(studentNumber, studentNumber));
+  for (const select of [DOM.inputStudentNumber, DOM.identityStudentNumber]) {
+    for (const group of select.querySelectorAll('optgroup')) {
+      for (let number = 1; number <= 20; number++) {
+        const studentNumber = number + group.dataset.studentSuffix;
+        group.append(new Option(studentNumber, studentNumber));
+      }
     }
   }
 
-  for (let grade = 1; grade <= 6; grade++) {
-    const group = document.createElement('optgroup');
-    group.label = 'ม.' + grade;
-    for (let number = 1; number <= 17; number++) {
-      const room = group.label + '/' + number;
-      group.append(new Option(room, room));
+  for (const select of [DOM.inputRoom, DOM.identityRoom]) {
+    for (let grade = 1; grade <= 6; grade++) {
+      const group = document.createElement('optgroup');
+      group.label = 'ม.' + grade;
+      for (let number = 1; number <= 17; number++) {
+        const room = group.label + '/' + number;
+        group.append(new Option(room, room));
+      }
+      select.append(group);
     }
-    DOM.inputRoom.append(group);
   }
 }
 
@@ -244,6 +260,15 @@ function setStudentNumberSelection(studentNumber) {
   DOM.legacyStudentNumberField.hidden = !legacy;
 }
 
+function updateOrderTotals() {
+  const quantity = Math.max(1, Math.min(5, Number(DOM.inputQuantity?.value || AppState.quantity || 1)));
+  const total = JERSEY_PRICE * quantity;
+  if (DOM.orderTotalDisplay) DOM.orderTotalDisplay.textContent = `฿${total.toLocaleString('th-TH')}`;
+  document.querySelectorAll('[data-total-price]').forEach(label => {
+    label.textContent = `฿${total.toLocaleString('th-TH')}`;
+  });
+}
+
 function canBookRoom(room) {
   return AppState.allRoomsSupported || PREVIOUS_ROOMS.has(room);
 }
@@ -252,6 +277,11 @@ function canBookRoom(room) {
 // 4. EVENT BINDINGS
 // ==========================================
 function bindEvents() {
+  if (DOM.inputQuantity) DOM.inputQuantity.addEventListener('change', () => {
+    AppState.quantity = Math.max(1, Math.min(5, Number(DOM.inputQuantity.value || 1)));
+    updateOrderTotals();
+  });
+
   const openSizeGuide = () => {
     if (!DOM.modalSizeGuide) return;
     prepareJerseyArtwork(DOM.sizeGuideJerseyEl, 'front');
@@ -412,11 +442,6 @@ function bindEvents() {
     DOM.btnDownloadJersey.addEventListener('click', downloadJerseyMockup);
   }
 
-  // Cancel edit mode
-  if (DOM.btnCancelEditMode) {
-    DOM.btnCancelEditMode.addEventListener('click', resetToNewMode);
-  }
-
   // Modals
   if (DOM.btnOpenDatabase) DOM.btnOpenDatabase.addEventListener('click', openDatabaseModal);
   if (DOM.btnCloseDatabase) DOM.btnCloseDatabase.addEventListener('click', closeDatabaseModal);
@@ -507,97 +532,63 @@ function initSlipUploadEvents() {
 
 function initJerseyDock() {
   const mobileViewport = window.matchMedia('(max-width: 767px)');
-  const narrowViewport = window.matchMedia('(max-width: 639px)');
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const visualViewport = window.visualViewport;
   const navCard = document.querySelector('.apple-glass-nav');
   const jersey = DOM.jerseyCardWrapper;
   const jerseyStage = jersey.parentElement;
-  const viewControlRow = document.getElementById('jerseyViewControlRow');
-  const viewControls = document.getElementById('jerseyViewControls');
+  const orderStudio = document.getElementById('orderStudio');
   const isOrderField = (element) => element?.matches?.('main .apple-glass-input');
 
-  let dockScrollFrame = 0;
-  let dockMode = null;
-  let dockedByScroll = false;
-  let dockAnimation;
   let editingField = null;
   let keyboardInset = 0;
+  let previewDocked = false;
+  let scrollFrame = 0;
   let focusReleaseTimer;
   let fieldRevealTimer;
 
-  const animateJerseyPosition = (fromRect) => {
-    const toRect = jersey.getBoundingClientRect();
-    if (!fromRect.width || !fromRect.height || !toRect.width || !toRect.height) return;
+  const updateJerseyDock = () => {
+    const isEditing = !orderStudio.classList.contains('hidden') && mobileViewport.matches && editingField !== null;
+    const nextKeyboardInset = isEditing && visualViewport && visualViewport.scale <= 1.05
+      ? Math.max(0, Math.round(window.innerHeight - visualViewport.height))
+      : 0;
+    if (nextKeyboardInset !== keyboardInset) {
+      keyboardInset = nextKeyboardInset;
+      document.body.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
+    }
+    document.body.classList.toggle('is-mobile-form-editing', isEditing);
 
-    const translateX = fromRect.left - toRect.left;
-    const translateY = fromRect.top - toRect.top;
-    const scaleX = fromRect.width / toRect.width;
-    const scaleY = fromRect.height / toRect.height;
-    dockAnimation = jersey.animate([
-      {
-        transform: `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`,
-        transformOrigin: 'top left'
-      },
-      { transform: 'translate(0, 0) scale(1, 1)', transformOrigin: 'top left' }
-    ], {
-      duration: 460,
-      easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
-    });
+    const canDock = !orderStudio.classList.contains('hidden') && mobileViewport.matches;
+    // Measure the compact toolbar edge even while its preview card is expanded.
+    const navRect = navCard.getBoundingClientRect();
+    const navBottom = navRect.top + 48;
+    const stageRect = jerseyStage.getBoundingClientRect();
+    if (!canDock) {
+      previewDocked = false;
+    } else if (isEditing) {
+      // Keep the live shirt preview in the expanded navbar while a print field is active.
+      previewDocked = true;
+    } else if (previewDocked) {
+      // Hysteresis prevents the preview jumping in and out at the navbar edge.
+      if (stageRect.top > navBottom + 24) previewDocked = false;
+    } else if (stageRect.bottom < navBottom + 8) {
+      previewDocked = true;
+    }
+
+    const nextParent = previewDocked ? navCard : jerseyStage;
+    if (jersey.parentElement !== nextParent) nextParent.append(jersey);
+    document.body.classList.toggle('is-mobile-preview-docked', previewDocked && jersey.parentElement === navCard);
+    jersey.classList.toggle('is-docked', previewDocked);
+    jerseyStage.classList.toggle('is-preview-docked', previewDocked);
+    navCard.classList.toggle('jersey-preview-expanded', previewDocked);
+    navCard.classList.remove('is-personalizing', 'has-short-viewport');
+    navCard.classList.toggle('is-form-editing', isEditing);
   };
 
-  const updateJerseyDock = () => {
-    if (dockScrollFrame) return;
-    dockScrollFrame = requestAnimationFrame(() => {
-      dockScrollFrame = 0;
-      const isMobile = mobileViewport.matches;
-      const controlsParent = isMobile ? navCard : viewControlRow;
-      if (viewControls.parentElement !== controlsParent) {
-        controlsParent.append(viewControls);
-        viewControls.classList.toggle('is-in-navbar', isMobile);
-        viewControlRow.classList.toggle('is-empty', isMobile);
-      }
-      if (narrowViewport.matches && AppState.viewSide === 'both') setJerseyView('back');
-
-      const isEditing = isMobile && editingField !== null;
-      const isPersonalizing = isEditing &&
-        (editingField === DOM.inputScreenName || editingField === DOM.inputScreenNumber);
-      const visibleHeight = visualViewport?.height ?? window.innerHeight;
-      navCard.classList.toggle('has-short-viewport', isPersonalizing && visibleHeight < 220);
-      const nextKeyboardInset = isEditing && visualViewport && visualViewport.scale <= 1.05
-        ? Math.max(0, Math.round(window.innerHeight - visibleHeight))
-        : 0;
-      if (nextKeyboardInset !== keyboardInset) {
-        keyboardInset = nextKeyboardInset;
-        document.body.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
-      }
-
-      let nextMode = 'stage';
-      if (isEditing) {
-        nextMode = isPersonalizing ? 'personalizing' : 'form';
-      } else {
-        dockedByScroll = window.scrollY > (dockedByScroll ? 220 : 260);
-        if (dockedByScroll) nextMode = isMobile ? 'mobile' : 'desktop';
-      }
-      if (nextMode === dockMode) return;
-
-      const crossesMobileDock = (dockMode === 'stage' && nextMode === 'mobile') ||
-        (dockMode === 'mobile' && nextMode === 'stage');
-      const shouldAnimate = crossesMobileDock && !reducedMotion.matches && typeof jersey.animate === 'function';
-      const fromRect = shouldAnimate ? jersey.getBoundingClientRect() : null;
-      dockAnimation?.cancel();
-
-      const parent = nextMode === 'stage' || nextMode === 'form' ? jerseyStage : navCard;
-      if (jersey.parentElement !== parent) parent.append(jersey);
-      jersey.classList.toggle('is-docked', parent === navCard);
-      navCard.classList.toggle('jersey-preview-expanded', nextMode === 'mobile');
-      navCard.classList.toggle('is-form-editing', isEditing);
-      navCard.classList.toggle('is-personalizing', isPersonalizing);
-      jerseyStage.classList.toggle('is-preview-docked', nextMode === 'mobile');
-      document.body.classList.toggle('is-mobile-form-editing', isEditing);
-
-      dockMode = nextMode;
-      if (fromRect) animateJerseyPosition(fromRect);
+  const scheduleJerseyDockUpdate = () => {
+    if (scrollFrame) return;
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = 0;
+      updateJerseyDock();
     });
   };
 
@@ -624,9 +615,9 @@ function initJerseyDock() {
     updateJerseyDock();
     if (editingField) revealFocusedField(120);
   };
-  window.addEventListener('scroll', updateJerseyDock, { passive: true });
   window.addEventListener('resize', handleViewportResize, { passive: true });
   visualViewport?.addEventListener('resize', handleViewportResize, { passive: true });
+  window.addEventListener('scroll', scheduleJerseyDockUpdate, { passive: true });
 
   document.addEventListener('focusin', (event) => {
     if (!isOrderField(event.target)) return;
@@ -640,9 +631,13 @@ function initJerseyDock() {
     window.clearTimeout(fieldRevealTimer);
     // Let the keyboard close before restoring the full preview.
     focusReleaseTimer = window.setTimeout(() => {
-      editingField = null;
+      editingField = isOrderField(document.activeElement) ? document.activeElement : null;
       updateJerseyDock();
     }, 350);
+  });
+  document.addEventListener('storefront-page-change', () => {
+    previewDocked = false;
+    updateJerseyDock();
   });
   updateJerseyDock();
 }
@@ -820,7 +815,10 @@ function getSlipSummary(data) {
 
 function slipCodeStorageKey(studentNumber, room) {
   const student = String(studentNumber).replace(/\s+/g, '').replace(/^0+(?=\d)/, '');
-  return 'AUTHONG_SLIP_CODE:' + JSON.stringify([AppState.gasUrl, normalizeRoomValue(room), student]);
+  const customerKey = AppState.customer?.type === 'general'
+    ? ['general', String(AppState.customer.phone || '').replace(/\D/g, '')]
+    : ['student', normalizeRoomValue(room), student];
+  return 'AUTHONG_SLIP_CODE:' + JSON.stringify([AppState.gasUrl, AppState.category, customerKey]);
 }
 
 function readSlipCode(studentNumber, room) {
@@ -878,8 +876,14 @@ async function loadSavedSlip(code, openFullImage) {
   try {
     const url = new URL(AppState.gasUrl);
     url.searchParams.set('action', 'getSlip');
-    url.searchParams.set('studentNumber', record.studentNumber);
-    url.searchParams.set('room', record.room);
+    url.searchParams.set('orderId', record.orderId || '');
+    url.searchParams.set('customerType', AppState.customer?.type || 'student');
+    url.searchParams.set('category', record.category || AppState.category || 'ORIGINAL');
+    if (AppState.customer?.type === 'general') url.searchParams.set('phone', AppState.customer.phone || '');
+    else {
+      url.searchParams.set('studentNumber', record.studentNumber);
+      url.searchParams.set('room', record.room);
+    }
     url.searchParams.set('slipCode', code);
     const response = await fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer', signal: request.signal });
     const result = await response.json();
@@ -1187,13 +1191,16 @@ function showFormContent() {
   if (DOM.submitButtonSection) DOM.submitButtonSection.classList.remove('hidden');
 }
 
-async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
+async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', prefetchedRecord) {
   hideFormContent();
   resetToNewMode();
-  AppState.studentNumber = studentNumber;
-  AppState.room = room;
-  setStudentNumberSelection(studentNumber);
-  DOM.inputRoom.value = room;
+  const customer = AppState.customer || { type: 'student', studentNumber, room };
+  AppState.studentNumber = customer.type === 'student' ? studentNumber : '';
+  AppState.room = customer.type === 'student' ? room : '';
+  if (customer.type === 'student') {
+    setStudentNumberSelection(studentNumber);
+    DOM.inputRoom.value = room;
+  }
   DOM.studentLookupSpinner.classList.remove('hidden');
   DOM.studentLookupText.textContent = 'กำลังตรวจสอบ...';
   DOM.studentLookupStatus.textContent = '';
@@ -1202,20 +1209,35 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
   try {
     if (!AppState.gasUrl) throw new Error('Google Apps Script URL is not configured.');
 
-    const searchUrl = new URL(AppState.gasUrl);
-    searchUrl.searchParams.set('action', 'search');
-    searchUrl.searchParams.set('studentNumber', studentNumber);
-    searchUrl.searchParams.set('room', room);
-    searchUrl.searchParams.set('_', Date.now().toString());
+    let result;
+    if (prefetchedRecord !== undefined && !slipCode) {
+      result = {
+        status: 'success', found: Boolean(prefetchedRecord), data: prefetchedRecord,
+        allRooms: AppState.allRoomsSupported
+      };
+    } else {
+      const searchUrl = new URL(AppState.gasUrl);
+      searchUrl.searchParams.set('action', 'search');
+      searchUrl.searchParams.set('customerType', customer.type || 'student');
+      searchUrl.searchParams.set('category', AppState.category || 'ORIGINAL');
+      if (customer.type === 'general') {
+        if (customer.customerId) searchUrl.searchParams.set('customerId', customer.customerId);
+        else searchUrl.searchParams.set('phone', customer.phone || '');
+      } else {
+        searchUrl.searchParams.set('studentNumber', studentNumber);
+        searchUrl.searchParams.set('room', room);
+      }
+      searchUrl.searchParams.set('_', Date.now().toString());
 
-    const response = await fetch(searchUrl.toString(), { cache: 'no-store' });
-    const result = await response.json();
+      const response = await fetch(searchUrl.toString(), { cache: 'no-store' });
+      result = await response.json();
+    }
     if (!result || result.status !== 'success') {
       throw new Error(result && result.message ? result.message : 'Invalid response from Google Sheets.');
     }
 
     AppState.allRoomsSupported = result.allRooms === true;
-    if (!slipCode && !canBookRoom(room)) {
+    if (customer.type === 'student' && !slipCode && !canBookRoom(room)) {
       DOM.studentLookupStatus.textContent = ROOM_UNAVAILABLE_MESSAGE;
       showToast(ROOM_UNAVAILABLE_MESSAGE, 'info');
       return;
@@ -1223,6 +1245,11 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
 
     if (result.found && result.data) {
       const gasRecord = {
+        ...result.data,
+        orderId: String(result.data.orderId || ''),
+        customerType: String(result.data.customerType || customer.type || 'student'),
+        category: String(result.data.category || AppState.category || 'ORIGINAL'),
+        quantity: Number(result.data.quantity || 1),
         studentNumber: String(result.data.studentNumber || studentNumber).replace(/\s+/g, ''),
         room: normalizeRoomValue(result.data.room || room),
         name: String(result.data.name ?? ''),
@@ -1235,13 +1262,11 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
 
       switchToEditMode(gasRecord, slipCode);
       showFormContent();
-      const loadedMessage = 'โหลดข้อมูลสำเร็จ';
-      DOM.studentLookupStatus.textContent = loadedMessage;
-      showToast(loadedMessage, 'success');
+      DOM.studentLookupStatus.textContent = '';
       return;
     }
 
-    if (slipCode || !NEW_STUDENT_NUMBER_PATTERN.test(studentNumber)) {
+    if (slipCode || (customer.type === 'student' && !NEW_STUDENT_NUMBER_PATTERN.test(studentNumber))) {
       DOM.studentLookupStatus.textContent = slipCode
         ? 'ไม่พบรายการจากลิงก์สลิป กรุณาติดต่อผู้ดูแล'
         : 'ไม่พบรายการจากเลขที่เดิม หากต้องการจองใหม่ให้เลือกเลขที่ในเมนู';
@@ -1249,8 +1274,8 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '') {
       return;
     }
     showFormContent();
-    DOM.studentLookupStatus.textContent = `ยังไม่มีรายการของเลขที่ ${studentNumber} ห้อง ${room} เริ่มสั่งจองได้`;
-    showToast('ไม่พบข้อมูลเดิม เริ่มสั่งจองใหม่ได้', 'success');
+    DOM.studentLookupStatus.textContent = '';
+    showToast('พร้อมเริ่มสั่งจอง', 'success');
   } catch (err) {
     console.error('Google Sheets lookup error:', err);
     DOM.studentLookupStatus.textContent = 'เชื่อมต่อ Google Sheets ไม่สำเร็จ ลองตรวจสอบ Apps Script';
@@ -1277,6 +1302,8 @@ function updateOrdersCountBadge() {
 function switchToEditMode(record, slipCode) {
   AppState.mode = 'edit';
   AppState.existingRecord = record;
+  AppState.pendingOrderId = String(record.orderId || '');
+  AppState.quantity = Number(record.quantity || 1);
   AppState.savedJerseyChanges = [];
 
   AppState.screenName = record.name;
@@ -1288,6 +1315,8 @@ function switchToEditMode(record, slipCode) {
 
   DOM.inputScreenName.value = AppState.screenName;
   DOM.inputScreenNumber.value = AppState.screenNumber;
+  if (DOM.inputQuantity) DOM.inputQuantity.value = String(Math.max(1, Math.min(5, AppState.quantity)));
+  updateOrderTotals();
   setStudentNumberSelection(AppState.studentNumber);
   DOM.inputRoom.value = AppState.room;
 
@@ -1306,26 +1335,8 @@ function switchToEditMode(record, slipCode) {
 
   restoreSavedSlip(slipCode);
 
-  DOM.modeStatusBanner.classList.remove('hidden');
   DOM.btnSubmitText.textContent = 'บันทึกการแก้ไขข้อมูล';
   DOM.btnSubmitIcon.className = 'fa-solid fa-floppy-disk mr-1.5';
-
-  // Show payment status if available
-  if (record.status) {
-    DOM.paymentStatusDisplay.classList.remove('hidden');
-    DOM.paymentStatusText.textContent = record.status;
-    
-    // Add color based on status
-    if (record.status.indexOf('ชำระเงินสำเร็จ') >= 0 || record.status.indexOf('ตรวจสอบแล้ว') >= 0) {
-      DOM.paymentStatusText.className = 'text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-200/70 text-emerald-900';
-    } else if (record.status.indexOf('รอตรวจสอบ') >= 0) {
-      DOM.paymentStatusText.className = 'text-xs font-bold px-2 py-0.5 rounded-md bg-amber-200/70 text-amber-900';
-    } else {
-      DOM.paymentStatusText.className = 'text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200/70 text-slate-700';
-    }
-  } else {
-    DOM.paymentStatusDisplay.classList.add('hidden');
-  }
 
   previewPersonalization();
 }
@@ -1333,6 +1344,10 @@ function switchToEditMode(record, slipCode) {
 function resetToNewMode() {
   AppState.mode = 'new';
   AppState.existingRecord = null;
+  AppState.pendingOrderId = '';
+  AppState.quantity = 1;
+  if (DOM.inputQuantity) DOM.inputQuantity.value = '1';
+  updateOrderTotals();
   AppState.savedJerseyChanges = [];
   AppState.orderStatus = 'รอชำระเงิน';
   
@@ -1356,8 +1371,6 @@ function resetToNewMode() {
   restoreSavedSlip();
   
   // Update button text
-  DOM.modeStatusBanner.classList.add('hidden');
-  DOM.paymentStatusDisplay.classList.add('hidden');
   DOM.btnSubmitText.textContent = 'ยืนยันการสั่งจองและส่งสลิป';
   DOM.btnSubmitIcon.className = 'fa-solid fa-check mr-1.5';
   
@@ -1396,11 +1409,47 @@ async function handleFormSubmit() {
   }
 
   const originalRecord = AppState.existingRecord;
-  const studentNumberInput = getStudentNumberInput();
-  const studentNumber = studentNumberInput.value.replace(/\s+/g, '');
-  const room = DOM.inputRoom.value.trim();
+  const customer = AppState.customer || {};
+  const studentNumber = customer.type === 'student'
+    ? String(customer.studentNumber || getStudentNumberInput().value).replace(/\s+/g, '')
+    : '';
+  const room = customer.type === 'student' ? String(customer.room || DOM.inputRoom.value).trim() : '';
   const name = formatScreenName(DOM.inputScreenName.value);
   const number = DOM.inputScreenNumber.value.trim();
+  const quantity = Math.max(1, Math.min(5, Number(originalRecord?.quantity || AppState.quantity || 1)));
+  const deliveryMethod = customer.deliveryMethod || document.getElementById('deliveryMethod')?.value || 'school_pickup';
+  const recipientName = '';
+  const shippingAddress = deliveryMethod === 'shipping'
+    ? String(customer.address || document.getElementById('shippingAddress')?.value || '').trim()
+    : '';
+  const postalCode = deliveryMethod === 'shipping'
+    ? String(customer.postalCode || document.getElementById('shippingPostcode')?.value || '').trim()
+    : '';
+  const contactName = String(customer.fullName || '').trim();
+  const phone = String(customer.phone || '').trim();
+
+  if (!['student', 'general'].includes(customer.type)) {
+    showToast('กรุณาเลือกประเภทผู้สั่งจองก่อน', 'error');
+    return;
+  }
+  if (customer.type === 'general' && !contactName) {
+    showToast('กรุณากรอกชื่อ-นามสกุล', 'error');
+    return;
+  }
+  if (customer.type === 'general' && !customer.googleCredential) {
+    showToast('กรุณาลงชื่อเข้าใช้ Google ก่อนทำรายการ', 'error');
+    return;
+  }
+  if (customer.type === 'general' && !/^[0-9+()\-\s]{8,20}$/.test(phone)) {
+    showToast('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง', 'error');
+    return;
+  }
+  if (deliveryMethod === 'shipping') {
+    if (!shippingAddress || !/^\d{5}$/.test(postalCode)) {
+      showToast('กรุณากรอกที่อยู่และรหัสไปรษณีย์ 5 หลัก', 'error');
+      return;
+    }
+  }
 
   if (!name) {
     showToast('กรุณาระบุชื่อที่ต้องการสกรีน', 'error');
@@ -1422,18 +1471,18 @@ async function handleFormSubmit() {
 
   const keepsLegacyNumber = LEGACY_STUDENT_NUMBER_PATTERN.test(studentNumber)
     && studentNumber === originalRecord?.studentNumber;
-  if (!NEW_STUDENT_NUMBER_PATTERN.test(studentNumber) && !keepsLegacyNumber) {
+  if (customer.type === 'student' && !NEW_STUDENT_NUMBER_PATTERN.test(studentNumber) && !keepsLegacyNumber) {
     showToast('กรุณาเลือกเลขที่ 1ก–20ก หรือ 1ข–20ข', 'error');
     DOM.inputStudentNumber.focus();
     return;
   }
 
-  if (!room) {
+  if (customer.type === 'student' && !room) {
     showToast('กรุณาเลือกห้องเรียน', 'error');
     DOM.inputRoom.focus();
     return;
   }
-  if (!canBookRoom(room)) {
+  if (customer.type === 'student' && !canBookRoom(room)) {
     showToast(ROOM_UNAVAILABLE_MESSAGE, 'info');
     return;
   }
@@ -1445,9 +1494,11 @@ async function handleFormSubmit() {
 
   AppState.studentNumber = studentNumber;
   AppState.room = room;
+  AppState.quantity = quantity;
+  AppState.customer = { ...customer, phone, deliveryMethod, recipientName, address: shippingAddress, postalCode };
 
   const orderActions = [DOM.inputStudentNumber, DOM.inputLegacyStudentNumber, DOM.inputRoom,
-    DOM.btnLookupStudent, DOM.btnReset, DOM.btnCancelEditMode, DOM.btnSubmit,
+    DOM.btnLookupStudent, DOM.btnReset, DOM.btnSubmit,
     DOM.inputSlipFile, DOM.btnReplaceSavedSlip, DOM.btnChangeSlip, DOM.btnRemoveSlip];
   AppState.isSubmitting = true;
   orderActions.forEach(button => { button.disabled = true; });
@@ -1458,16 +1509,35 @@ async function handleFormSubmit() {
   const shouldSendSlip = AppState.slipChanged && Boolean(AppState.slipImage);
   const slipCode = shouldSendSlip ? AppState.newSlipCode :
     originalRecord ? readSlipCode(originalRecord.studentNumber, originalRecord.room) : '';
-  
+  const orderId = String(originalRecord?.orderId || AppState.pendingOrderId || createOrderId());
+  AppState.pendingOrderId = orderId;
+
   const orderData = {
+    orderId,
+    customerType: customer.type,
+    customer: {
+      type: customer.type,
+      studentNumber,
+      room,
+      fullName: contactName || String(customer.studentName || '').trim(),
+      phone,
+      deliveryMethod,
+      recipientName,
+      address: shippingAddress,
+      postalCode,
+    },
+    googleCredential: customer.type === 'general' ? String(customer.googleCredential || '') : '',
+    category: AppState.category || 'ORIGINAL',
     studentNumber: studentNumber,
     room: room,
     originalStudentNumber: String(originalRecord?.studentNumber ?? ''),
     originalRoom: normalizeRoomValue(originalRecord?.room),
-    productTitle: 'เสื้อแข่งขันทีมสีม่วง 2026',
+    productTitle: `${AppState.category || 'ORIGINAL'} · Authong Athletics 2026`,
     name,
     number: number,
     size: AppState.size,
+    quantity,
+    unitPrice: JERSEY_PRICE,
     price: JERSEY_PRICE,
     timestamp: nowStr,
     status: shouldSendSlip ? 'รอตรวจสอบสลิป' : AppState.orderStatus,
@@ -1492,8 +1562,14 @@ async function handleFormSubmit() {
 
       const verifyUrl = new URL(AppState.gasUrl);
       verifyUrl.searchParams.set('action', 'search');
-      verifyUrl.searchParams.set('studentNumber', studentNumber);
-      verifyUrl.searchParams.set('room', room);
+      verifyUrl.searchParams.set('customerType', customer.type);
+      verifyUrl.searchParams.set('category', AppState.category || 'ORIGINAL');
+      verifyUrl.searchParams.set('orderId', orderId);
+      if (customer.type === 'general') verifyUrl.searchParams.set('customerId', String(customer.customerId || ''));
+      else {
+        verifyUrl.searchParams.set('studentNumber', studentNumber);
+        verifyUrl.searchParams.set('room', room);
+      }
       if (slipCode) verifyUrl.searchParams.set('slipCode', slipCode);
       verifyUrl.searchParams.set('_', Date.now().toString());
       const verifyResponse = await fetch(verifyUrl, { cache: 'no-store', referrerPolicy: 'no-referrer' });
@@ -1501,11 +1577,14 @@ async function handleFormSubmit() {
       const saved = verifyResult?.status === 'success' && verifyResult.found && verifyResult.data;
 
       const orderMatches = !!saved
+        && String(saved.orderId ?? '') === orderId
         && String(saved.studentNumber ?? '').trim() === studentNumber
         && normalizeRoomValue(saved.room) === room
         && formatScreenName(saved.name) === orderData.name
         && String(saved.number ?? '').trim() === orderData.number
-        && String(saved.size ?? '').trim().toUpperCase() === orderData.size;
+        && String(saved.size ?? '').trim().toUpperCase() === orderData.size
+        && String(saved.category ?? AppState.category) === AppState.category
+        && Number(saved.quantity || 1) === quantity;
       if (orderMatches && (!shouldSendSlip || saved.slipAvailable === undefined || saved.slipCodeMatches === true)) {
         confirmedOrder = saved;
       }
@@ -1525,6 +1604,7 @@ async function handleFormSubmit() {
   }
 
   if (slipCode && confirmedOrder.slipCodeMatches === true) rememberSlipCode(studentNumber, room, slipCode);
+  AppState.pendingOrderId = String(confirmedOrder.orderId || orderId);
   const legacySlipUpload = shouldSendSlip && confirmedOrder.slipAvailable === undefined;
   if (originalRecord && AppState.existingRecord === originalRecord) {
     const savedChanges = getJerseyChanges(originalRecord, orderData);
@@ -1552,6 +1632,7 @@ async function handleFormSubmit() {
   } else {
     showToast(shouldSendSlip ? 'บันทึกคำสั่งจองและสลิปแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
   }
+  window.dispatchEvent(new Event('authong-order-saved'));
 }
 
 // ==========================================

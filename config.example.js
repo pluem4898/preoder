@@ -1,4 +1,5 @@
-// Configuration example - Copy this to config.js and fill in your values
-const CONFIG = {
-  gasUrl: 'https://script.google.com/macros/s/AKfycby4uoyfn-QCbTk2BqZnzb1ZOt54AjAXMe5y0ahMKzFj7MZZQzNeTe8PAcHg5SrynOzhAQ/exec'
+// Public browser configuration. Never put an OAuth Client Secret here.
+window.CONFIG = {
+  gasUrl: '',
+  googleClientId: '815743815680-3314m7scb7nkotsjn1vf68t1uvt69kbe.apps.googleusercontent.com'
 };
