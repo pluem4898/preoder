@@ -14,7 +14,7 @@
 
 ## เปิด localhost
 
-จากโฟลเดอร์ work/purple รันคำสั่ง node ..\preoder-preview.cjs แล้วเปิด http://localhost:8765/ ถ้ามี `config.js` ที่ตั้ง `gasUrl` ไว้ localhost จะส่งคำขอผ่านพร็อกซีไป Apps Script จริง; ถ้าไม่มี URL จะใช้ข้อมูลจำลองในหน่วยความจำ
+จากโฟลเดอร์ work/purple รันคำสั่ง node ..\preoder-preview.cjs แล้วเปิด http://localhost:8765/ โดย `config.example.js` ตั้งค่า Apps Script URL และ Google Client ID ที่ใช้จริงไว้แล้ว; `config.js` ที่ถูก ignore สามารถใช้ override เฉพาะเครื่องได้
 
 ## ติดตั้ง Google Apps Script
 
