@@ -39,7 +39,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261119-3">
+  <link rel="stylesheet" href="style.css?v=20261119-4">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -111,7 +111,7 @@
 
         <div id="googleLoginPanel" class="google-login-panel hidden">
           <div id="googleSignInButton" class="google-sign-in-button"></div>
-          <span id="googleLoginStatus" class="sr-only" role="status" aria-live="polite"></span>
+          <span id="googleLoginStatus" class="google-login-status" role="status" aria-live="polite"></span>
         </div>
 
         <div id="generalIdentityFields" class="identity-input-grid hidden">
@@ -192,8 +192,18 @@
         <span class="orders-customer-copy"><small id="ordersCustomerType"></small><strong id="ordersCustomerPrimary"></strong><span id="ordersCustomerSecondary"></span></span>
         <button type="button" id="btnLogoutCustomer" class="orders-customer-logout">ออก</button>
         <div id="ordersDeliveryEditor" class="orders-delivery-editor hidden">
-          <button type="button" id="btnEditDelivery" class="orders-delivery-toggle">แก้ไขข้อมูลจัดส่ง</button>
+          <button type="button" id="btnEditDelivery" class="orders-delivery-toggle">แก้ไขข้อมูลบุคคลทั่วไป</button>
           <div id="ordersDeliveryFields" class="orders-delivery-fields hidden">
+            <div class="orders-contact-fields">
+              <div class="identity-input-group">
+                <label for="ordersCustomerName">ชื่อ-นามสกุล</label>
+                <input id="ordersCustomerName" type="text" maxlength="100" autocomplete="name" class="apple-glass-input w-full px-3.5 py-3">
+              </div>
+              <div class="identity-input-group">
+                <label for="ordersCustomerPhone">เบอร์โทรศัพท์</label>
+                <input id="ordersCustomerPhone" type="tel" maxlength="20" inputmode="tel" autocomplete="tel" class="apple-glass-input w-full px-3.5 py-3">
+              </div>
+            </div>
             <label for="ordersDeliveryMethod">รับเสื้อแบบไหน</label>
             <select id="ordersDeliveryMethod" class="apple-glass-input w-full px-3.5 py-3">
               <option value="school_pickup">รับที่โรงเรียน</option>
@@ -211,7 +221,7 @@
             </div>
             <div class="orders-delivery-actions">
               <button type="button" id="btnCancelDeliveryEdit" class="change-customer-button">ยกเลิก</button>
-              <button type="button" id="btnSaveDeliveryEdit" class="orders-delivery-save">บันทึกข้อมูลจัดส่ง</button>
+              <button type="button" id="btnSaveDeliveryEdit" class="orders-delivery-save">บันทึกข้อมูล</button>
             </div>
           </div>
         </div>
@@ -359,7 +369,8 @@
                 class="apple-glass-input w-full px-3.5 py-2.5">
             </div>
             <button type="button" id="btnLookupStudent"
-              class="apple-btn-primary w-full px-3.5 py-2.5 text-sm flex items-center justify-center gap-2">
+              class="apple-btn-primary w-full px-3.5 py-2.5 text-sm flex items-center justify-center gap-2"
+              aria-busy="false">
               <i id="studentLookupSpinner" class="fa-solid fa-circle-notch fa-spin hidden"></i>
               <span id="studentLookupText">ตรวจสอบข้อมูล / เริ่มจอง</span>
             </button>
@@ -465,12 +476,12 @@
                 <i class="fa-solid fa-receipt text-purple-600"></i>
                 <span>หลักฐานการโอนเงิน (สลิปชำระเงิน)</span>
               </label>
-              <div class="payment-header-badges flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
+              <div class="payment-header-badges flex flex-wrap items-center gap-1.5">
                 <span id="orderStatusBadge" class="shrink-0 whitespace-nowrap text-[10px] font-bold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full">
                   <i class="fa-solid fa-hourglass-half mr-1"></i>รอตรวจสอบสลิป
                 </span>
-                <span class="shrink-0 whitespace-nowrap text-[10px] font-bold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded-full">
-                  ยอดโอน <span data-total-price>฿279</span>
+                <span class="shrink-0 text-[10px] font-bold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded-full">
+                  สถานะการชำระเงิน <strong id="paymentStatusText">รอชำระเงิน</strong>
                 </span>
               </div>
             </div>
@@ -877,12 +888,12 @@
   </dialog>
 
   <!-- Public fallback config is tracked; config.js can override it locally. -->
-  <script src="config.example.js?v=20261119-3"></script>
+  <script src="config.example.js?v=20261119-4"></script>
   <script src="config.js" onerror="console.info('[CONFIG] config.js not found')"></script>
 
   <!-- Main JS -->
-  <script src="app.js?v=20261119-2"></script>
-  <script src="storefront.js?v=20261119-1"></script>
+  <script src="app.js?v=20261119-4"></script>
+  <script src="storefront.js?v=20261119-3"></script>
 </body>
 
 </html>

@@ -1009,7 +1009,9 @@ body.size-guide-open {
 .google-login-panel > p:first-child { margin: 0; color: #574a5d; font-size: 12px; font-weight: 700; }
 .google-sign-in-button { min-height: 40px; }
 .google-sign-in-button.is-loading { opacity: .55; pointer-events: none; }
-.google-login-status { min-height: 16px; margin: 0; color: #75667e; font-size: 11px; }
+.google-login-status { display: flex; min-height: 16px; align-items: center; gap: 7px; margin: 0; color: #75667e; font-size: 11px; }
+.google-login-status.is-loading::before { width: 12px; height: 12px; flex: 0 0 12px; border: 2px solid #dec2f4; border-top-color: #7c3aed; border-radius: 50%; animation: google-login-spin .7s linear infinite; content: ""; }
+@keyframes google-login-spin { to { transform: rotate(360deg); } }
 .delivery-choice-group { max-width: 420px; margin-top: 14px; }
 .identity-continue { display: flex; width: 100%; min-height: 50px; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; font-size: 14px; }
 .header-customer-chip { max-width: min(68vw, 330px); overflow: hidden; padding: 8px 13px; border: 1px solid rgba(234,220,239,.9); border-radius: 999px; background: #fbf7fd; color: #583764; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
@@ -1206,13 +1208,14 @@ body.storefront-order-view { --keyboard-inset: 0px; }
 .customer-order-details p { display: flex; justify-content: space-between; gap: 8px; margin: 0; color: #111; font-size: 10px; font-weight: 800; }
 .customer-order-details strong { max-width: 60%; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .customer-order-actions { display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-top: 10px; }
-.customer-order-status { max-width: 56%; overflow: hidden; padding: 6px 9px; border-radius: 999px; background: #f7dc82; color: #4c3a1c; font-size: 9px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.customer-order-status { max-width: 60%; overflow: hidden; padding: 6px 9px; border-radius: 999px; background: #f7dc82; color: #4c3a1c; font-size: 9px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
 .customer-order-status.paid { background: #8fe184; color: #173d21; }
 .customer-order-status.review { background: #f7dc82; color: #654d19; }
 .customer-order-status.waiting { background: #ddd2e2; color: #503f57; }
 .customer-order-edit { flex: 0 0 auto; padding: 7px 12px; border: 0; border-radius: 999px; background: #6e4c78; color: #fff; font-size: 10px; font-weight: 800; }
 .customer-order-edit:disabled { background: #b8a8bd; cursor: not-allowed; }
 .customer-orders-empty, .customer-orders-loading, .customer-orders-error { display: grid; min-height: 210px; place-content: center; justify-items: center; gap: 8px; color: #6e4c78; text-align: center; }
+.customer-orders-loading i { font-size: 28px; }
 .customer-orders-empty i { font-size: 36px; }
 .customer-orders-empty strong { font-size: 15px; }
 .customer-orders-empty span { font-size: 11px; }
@@ -1294,6 +1297,7 @@ body.storefront-order-view { --keyboard-inset: 0px; }
 .orders-delivery-toggle { align-self: flex-start; padding: 7px 12px; border: 1px solid rgba(110,76,120,.2); border-radius: 999px; background: #f8ddfb; color: #6e4c78; font-size: 11px; font-weight: 900; }
 .orders-delivery-fields { display: none; width: 100%; gap: 10px; }
 .orders-delivery-fields:not(.hidden) { display: grid; }
+.orders-contact-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
 .orders-delivery-fields > label, .orders-shipping-fields label { color: #45364b; font-size: 11px; font-weight: 800; }
 .orders-shipping-fields { display: none; gap: 10px; }
 .orders-shipping-fields:not(.hidden) { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr); }
@@ -1354,6 +1358,7 @@ body.storefront-order-view { --keyboard-inset: 0px; }
   .customer-context-row { height: 0; min-height: 0; padding-left: 0; }
   .header-customer-chip { left: 19px; }
   .orders-shipping-fields:not(.hidden) { grid-template-columns: minmax(0,1fr); }
+  .orders-contact-fields { grid-template-columns: minmax(0,1fr); }
   .home-panel { margin-top: 2px; }
   .collection-grid { gap: 28px; }
   .collection-card { min-height: 181px; }

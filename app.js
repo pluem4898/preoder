@@ -57,7 +57,7 @@ const AppState = {
   size: 'L',
   screenName: '',
   screenNumber: '10',
-  paymentStatus: 'pending', // legacy
+  paymentStatus: 'รอชำระเงิน',
   orderStatus: 'รอชำระเงิน', // ค่าสถานะหลักที่บันทึกลง Sheets
   allRoomsSupported: false,
   slipImage: null, // Base64 data URL
@@ -118,6 +118,7 @@ const DOM = {
   // Order Status Display (Read-only)
   paymentStatusSection: document.getElementById('paymentStatusSection'),
   orderStatusBadge: document.getElementById('orderStatusBadge'),
+  paymentStatusText: document.getElementById('paymentStatusText'),
   statusBtns: document.querySelectorAll('.status-btn'),
 
   // Payment & Slip Upload Elements
@@ -458,7 +459,10 @@ function bindEvents() {
 // ==========================================
 // 5. SLIP UPLOAD & PROCESSING
 // ==========================================
-const LOCKED_PAYMENT_STATUSES = new Set(['ชำระเงินแล้ว', 'ชำระเงินสำเร็จ', 'ตรวจสอบแล้ว', 'กำลังผลิต', 'จัดส่งแล้ว', 'เสร็จสิ้น']);
+const LOCKED_PAYMENT_STATUSES = new Set(['ผ่าน', 'ผ่านแล้ว', 'ชำระแล้ว', 'ชำระเงินแล้ว', 'ชำระเงินสำเร็จ', 'ตรวจสอบแล้ว', 'อนุมัติแล้ว', 'กำลังผลิต', 'พร้อมรับ', 'จัดส่งแล้ว', 'เสร็จสิ้น']);
+function isSlipUploadLocked(status) {
+  return LOCKED_PAYMENT_STATUSES.has(String(status || '').replace(/\s+/g, '').trim());
+}
 const SLIP_CODE_PATTERN = /^[0-9a-f]{32}$/;
 let savedSlipRequest = null;
 let slipSelection = 0;
@@ -672,7 +676,11 @@ function initPaymentQrEvents() {
 }
 
 async function processSlipFile(file) {
-  if (AppState.isSubmitting || LOCKED_PAYMENT_STATUSES.has(AppState.orderStatus)) return;
+  if (AppState.isSubmitting) return;
+  if (isSlipUploadLocked(AppState.existingRecord?.paymentStatus || AppState.orderStatus)) {
+    showToast('ชำระเงินผ่านแล้ว แก้ข้อมูลเสื้อได้แต่เปลี่ยนสลิปไม่ได้', 'info');
+    return;
+  }
   if (!file || !file.type.startsWith('image/')) {
     showToast('กรุณาเลือกไฟล์รูปภาพเท่านั้น (JPG, PNG, WEBP)', 'error');
     return;
@@ -758,12 +766,22 @@ function renderOrderStatus(statusText) {
 // ==========================================
 function renderSlipPreview() {
   const record = AppState.existingRecord;
-  const locked = LOCKED_PAYMENT_STATUSES.has(AppState.orderStatus);
+  const savedPaymentStatus = String(record?.paymentStatus || '').trim();
+  const paymentStatus = AppState.slipChanged
+    ? 'รอตรวจสอบสลิป'
+    : savedPaymentStatus || AppState.paymentStatus || (record?.hasSlip ? 'รอตรวจสอบสลิป' : AppState.orderStatus || 'รอชำระเงิน');
+  const locked = isSlipUploadLocked(savedPaymentStatus || AppState.paymentStatus || AppState.orderStatus);
   const hasPreview = Boolean(AppState.slipImage);
   const hasSavedSlip = Boolean(record?.hasSlip);
   DOM.orderStatusBadge.textContent = AppState.orderStatus;
+  if (DOM.paymentStatusText) DOM.paymentStatusText.textContent = paymentStatus;
   DOM.paymentAccountInfo.classList.toggle('hidden', locked);
   DOM.paymentCompleteInfo.classList.toggle('hidden', !locked);
+  if (locked) DOM.paymentCompleteInfo.textContent = 'ชำระเงินผ่านแล้ว · แก้ไขข้อมูลเสื้อได้ แต่เปลี่ยนสลิปไม่ได้';
+  DOM.inputSlipFile.disabled = locked;
+  DOM.btnReplaceSavedSlip.disabled = locked;
+  DOM.btnChangeSlip.disabled = locked;
+  DOM.btnRemoveSlip.disabled = locked;
   DOM.slipDropzone.classList.toggle('hidden', locked || hasPreview || hasSavedSlip);
   DOM.savedSlipCard.classList.toggle('hidden', hasPreview || !hasSavedSlip);
   DOM.btnReplaceSavedSlip.classList.toggle('hidden', locked);
@@ -1191,6 +1209,16 @@ function showFormContent() {
   if (DOM.submitButtonSection) DOM.submitButtonSection.classList.remove('hidden');
 }
 
+function setStudentLookupLoading(isLoading, label = 'กำลังตรวจสอบ...') {
+  if (DOM.studentLookupSpinner) DOM.studentLookupSpinner.classList.toggle('hidden', !isLoading);
+  if (DOM.studentLookupText) DOM.studentLookupText.textContent = isLoading ? label : 'ตรวจสอบข้อมูล / เริ่มจอง';
+  if (DOM.btnLookupStudent) {
+    DOM.btnLookupStudent.disabled = isLoading;
+    DOM.btnLookupStudent.setAttribute('aria-busy', String(isLoading));
+    DOM.btnLookupStudent.classList.toggle('is-loading', isLoading);
+  }
+}
+
 async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', prefetchedRecord) {
   hideFormContent();
   resetToNewMode();
@@ -1201,10 +1229,8 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', pref
     setStudentNumberSelection(studentNumber);
     DOM.inputRoom.value = room;
   }
-  DOM.studentLookupSpinner.classList.remove('hidden');
-  DOM.studentLookupText.textContent = 'กำลังตรวจสอบ...';
+  setStudentLookupLoading(true, 'กำลังตรวจสอบ...');
   DOM.studentLookupStatus.textContent = '';
-  DOM.btnLookupStudent.disabled = true;
 
   try {
     if (!AppState.gasUrl) throw new Error('Google Apps Script URL is not configured.');
@@ -1281,9 +1307,7 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', pref
     DOM.studentLookupStatus.textContent = 'เชื่อมต่อ Google Sheets ไม่สำเร็จ ลองตรวจสอบ Apps Script';
     showToast('เกิดข้อผิดพลาดในการค้นหา Google Sheets', 'error');
   } finally {
-    DOM.studentLookupSpinner.classList.add('hidden');
-    DOM.studentLookupText.textContent = 'ตรวจสอบข้อมูล / เริ่มจอง';
-    DOM.btnLookupStudent.disabled = false;
+    setStudentLookupLoading(false);
   }
 }
 function loadOrdersDatabase() {
@@ -1312,6 +1336,7 @@ function switchToEditMode(record, slipCode) {
   AppState.room = normalizeRoomValue(record.room);
   AppState.size = record.size || 'L';
   AppState.orderStatus = record.status || 'รอชำระเงิน';
+  AppState.paymentStatus = record.paymentStatus || (record.hasSlip ? 'รอตรวจสอบสลิป' : AppState.orderStatus);
 
   DOM.inputScreenName.value = AppState.screenName;
   DOM.inputScreenNumber.value = AppState.screenNumber;
@@ -1350,6 +1375,7 @@ function resetToNewMode() {
   updateOrderTotals();
   AppState.savedJerseyChanges = [];
   AppState.orderStatus = 'รอชำระเงิน';
+  AppState.paymentStatus = 'รอชำระเงิน';
   
   // Clear form fields
   AppState.screenName = '';
@@ -1600,6 +1626,7 @@ async function handleFormSubmit() {
   } finally {
     AppState.isSubmitting = false;
     orderActions.forEach(button => { button.disabled = false; });
+    renderSlipPreview();
     DOM.btnSubmitText.textContent = AppState.mode === 'edit' ? 'บันทึกการแก้ไขข้อมูล' : 'ยืนยันการสั่งจองและส่งสลิป';
   }
 
@@ -1615,6 +1642,8 @@ async function handleFormSubmit() {
       size: orderData.size,
       studentNumber: orderData.studentNumber,
       room: orderData.room,
+      status: confirmedOrder.status || AppState.orderStatus,
+      paymentStatus: confirmedOrder.paymentStatus || originalRecord.paymentStatus,
       ...getSlipSummary(confirmedOrder)
     });
     renderJerseyChanges();
@@ -1623,6 +1652,7 @@ async function handleFormSubmit() {
   AppState.slipChanged = false;
   AppState.newSlipCode = '';
   AppState.slipUploadedAt = null;
+  AppState.paymentStatus = confirmedOrder.paymentStatus || AppState.paymentStatus;
   renderOrderStatus(confirmedOrder.status || AppState.orderStatus);
 
   triggerConfetti();
@@ -1860,7 +1890,6 @@ function showCancelledOrderAlert() {
       <div class="flex gap-2">
         <button type="button" id="btnContactSupport" 
           class="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold text-sm hover:shadow-lg transition">
-          <i class="fa-solid fa-comments mr-1.5"></i>
           ติดต่อทีมงาน
         </button>
         <button type="button" id="btnCloseModal" 

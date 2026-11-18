@@ -137,7 +137,8 @@ function doPost(e) {
       }
     }
     var oldPaymentStatus = oldOrder ? String(oldOrder[oldMap['Payment Status'] - 1] || '') : '';
-    if (slipImage && ['ผ่าน', 'ชำระเงินแล้ว', 'ชำระเงินสำเร็จ'].indexOf(oldPaymentStatus) >= 0) {
+    var oldOrderStatus = oldOrder ? String(oldOrder[oldMap['Order Status'] - 1] || '') : '';
+    if (slipImage && (isPaymentApproved_(oldPaymentStatus) || isPaymentApproved_(oldOrderStatus))) {
       throw new Error('รายการนี้ตรวจสลิปผ่านแล้ว หากต้องแก้ไขให้ติดต่อผู้ดูแล');
     }
 
@@ -191,6 +192,11 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function isPaymentApproved_(status) {
+  var value = String(status || '').replace(/\s/g, '');
+  return ['ผ่าน', 'ผ่านแล้ว', 'ชำระแล้ว', 'ชำระเงินแล้ว', 'ชำระเงินสำเร็จ', 'ตรวจสอบแล้ว', 'อนุมัติแล้ว', 'กำลังผลิต', 'พร้อมรับ', 'จัดส่งแล้ว', 'เสร็จสิ้น'].indexOf(value) >= 0;
 }
 
 function ensureWorkbook_() {

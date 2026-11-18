@@ -53,11 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.dispatchEvent(new Event('storefront-page-change'));
   }
 
-  function isLocalPreview() {
-    return ['localhost', '127.0.0.1'].includes(location.hostname)
-      && /\/gas\/?$/.test(AppState.gasUrl || '');
-  }
-
   function persistCustomerSession(page = 'home') {
     try {
       if (!AppState.customer) {
@@ -66,8 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const customer = { ...AppState.customer };
       // Store only the opaque, short-lived Apps Script session token, never Google's ID token or email.
-      if (customer.type === 'general' && customer.googleCredential !== 'local-preview-session'
-        && !/^[a-f0-9]{64}$/i.test(String(customer.googleCredential || ''))) {
+      if (customer.type === 'general' && !/^[a-f0-9]{64}$/i.test(String(customer.googleCredential || ''))) {
         customer.googleCredential = '';
       }
       sessionStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify({
@@ -84,8 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const saved = JSON.parse(sessionStorage.getItem(CUSTOMER_SESSION_KEY) || 'null');
       if (!saved?.customer || !['student', 'general'].includes(saved.customer.type)) return null;
       const customer = saved.customer;
-      if (customer.type === 'general' && customer.googleCredential !== 'local-preview-session'
-        && (!/^[a-f0-9]{64}$/i.test(String(customer.googleCredential || ''))
+      if (customer.type === 'general' && (!/^[a-f0-9]{64}$/i.test(String(customer.googleCredential || ''))
           || Number(customer.googleSessionExpiresAt || 0) <= Date.now())) {
         customer.googleCredential = '';
       }
@@ -170,6 +163,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function requestCustomerProfileUpdate(customer) {
+    if (!AppState.gasUrl) throw new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL');
+    if (!customer.googleCredential || customer.googleCredential === 'local-preview-session') {
+      throw new Error('กรุณาลงชื่อเข้าใช้ Google อีกครั้งก่อนบันทึกข้อมูล');
+    }
     const nonce = crypto.randomUUID().replace(/-/g, '');
     await fetch(AppState.gasUrl, {
       method: 'POST',
@@ -248,13 +245,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const badge = document.createElement('span');
       const paymentStatus = order.paymentStatus || order.status || 'รอชำระเงิน';
       badge.className = `customer-order-status ${statusClass(paymentStatus)}`;
-      badge.textContent = paymentStatus;
+      badge.textContent = `สถานะ: ${paymentStatus}`;
+      badge.setAttribute('aria-label', `สถานะการชำระเงิน ${paymentStatus}`);
       const edit = document.createElement('button');
       edit.type = 'button';
       edit.className = 'customer-order-edit';
       edit.textContent = 'แก้ไขข้อมูล';
-      edit.disabled = order.category !== 'ORIGINAL' || ['ผ่าน', 'ชำระเงินแล้ว', 'ชำระเงินสำเร็จ'].includes(paymentStatus);
+      edit.disabled = order.category !== 'ORIGINAL';
       if (order.category !== 'ORIGINAL') edit.title = 'คอลเลกชันนี้ยังไม่เปิดให้แก้ไขบนเว็บไซต์';
+      else if (/ผ่าน|ชำระเงินแล้ว|ชำระเงินสำเร็จ|ตรวจสอบแล้ว|กำลังผลิต|พร้อมรับ|จัดส่งแล้ว|เสร็จสิ้น/.test(paymentStatus)) {
+        edit.title = 'แก้ไขข้อมูลเสื้อได้ แต่ไม่สามารถเปลี่ยนสลิปที่ผ่านแล้ว';
+      }
       edit.addEventListener('click', () => openCollectionOrder(order.category));
       actions.append(badge, edit);
       content.append(title, detail, actions);
@@ -333,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (customerOrdersCacheIsReady()) {
       renderCustomerOrders();
     } else {
-      customerOrderList.innerHTML = '<div class="customer-orders-loading">กำลังโหลดรายการ…</div>';
+      customerOrderList.innerHTML = '<div class="customer-orders-loading"><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i><span>กำลังโหลดรายการ…</span></div>';
       refreshCustomerOrders().catch(error => {
         customerOrderList.innerHTML = '';
         const message = document.createElement('p');
@@ -379,19 +380,9 @@ document.addEventListener('DOMContentLoaded', () => {
   async function handleGoogleCredential(response) {
     if (!response || !response.credential) return;
     googleLoginStatus.textContent = 'กำลังตรวจสอบบัญชี Google…';
+    googleLoginStatus.classList.add('is-loading');
     googleSignInButton.classList.add('is-loading');
     try {
-      if (isLocalPreview()) {
-        // Exercise Google Identity on localhost without sending or retaining its ID token.
-        AppState.customer = {
-          type: 'general', customerId: '', googleCredential: 'local-preview-session',
-          fullName: '', phone: '', deliveryMethod: 'school_pickup', address: '', postalCode: ''
-        };
-        generalFields.classList.remove('hidden');
-        setDeliveryVisibility();
-        googleLoginStatus.textContent = '';
-        return;
-      }
       const profile = await requestGoogleProfile(response.credential);
       AppState.customer = {
         type: 'general',
@@ -418,6 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
       googleLoginStatus.textContent = error.message || 'ลงชื่อเข้าใช้ไม่สำเร็จ';
       showToast(googleLoginStatus.textContent, 'error');
     } finally {
+      googleLoginStatus.classList.remove('is-loading');
       googleSignInButton.classList.remove('is-loading');
     }
   }
@@ -428,7 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
       googleLoginStatus.textContent = 'ยังไม่ได้ตั้งค่า Google Client ID · ดูวิธีใน README';
       return;
     }
-    if (!AppState.gasUrl && !isLocalPreview()) {
+    if (!AppState.gasUrl) {
       googleLoginStatus.textContent = '';
       return;
     }
@@ -537,7 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('เลือกก่อนว่าเป็นนักเรียนหรือบุคคลทั่วไป', 'error');
       return;
     }
-    if (selectedType === 'general' && !AppState.customer?.googleCredential) {
+    if (selectedType === 'general' && (!AppState.customer?.googleCredential || AppState.customer.googleCredential === 'local-preview-session')) {
       showToast('กรุณาลงชื่อเข้าใช้ Google ก่อน', 'error');
       return;
     }
@@ -577,6 +569,22 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('จัดส่งต้องกรอกที่อยู่และรหัสไปรษณีย์ 5 หลัก', 'error');
         return;
       }
+    }
+
+    const continueButton = document.getElementById('btnContinueIdentity');
+    const originalContinueMarkup = continueButton.innerHTML;
+    continueButton.disabled = true;
+    continueButton.setAttribute('aria-busy', 'true');
+    continueButton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> กำลังบันทึกข้อมูล...';
+    try {
+      if (selectedType === 'general') await requestCustomerProfileUpdate(customer);
+    } catch (error) {
+      showToast(error.message || 'บันทึกข้อมูลผู้ใช้ไม่สำเร็จ', 'error');
+      return;
+    } finally {
+      continueButton.disabled = false;
+      continueButton.setAttribute('aria-busy', 'false');
+      continueButton.innerHTML = originalContinueMarkup;
     }
 
     AppState.customer = customer;
@@ -637,6 +645,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnEditDelivery').addEventListener('click', () => {
     const customer = AppState.customer;
     if (!customer || customer.type !== 'general') return;
+    document.getElementById('ordersCustomerName').value = customer.fullName || '';
+    document.getElementById('ordersCustomerPhone').value = customer.phone || '';
     ordersDeliveryMethod.value = customer.deliveryMethod || 'school_pickup';
     ordersShippingAddress.value = customer.address || '';
     ordersShippingPostcode.value = customer.postalCode || '';
@@ -651,37 +661,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const button = event.currentTarget;
     const customer = AppState.customer;
     if (!customer || customer.type !== 'general') return;
+    const fullName = document.getElementById('ordersCustomerName').value.trim();
+    const phone = document.getElementById('ordersCustomerPhone').value.trim();
     const delivery = ordersDeliveryMethod.value;
     const address = delivery === 'shipping' ? ordersShippingAddress.value.trim() : '';
     const postalCode = delivery === 'shipping' ? ordersShippingPostcode.value.trim() : '';
+    if (!fullName || !/^[0-9+()\-\s]{8,20}$/.test(phone)) {
+      showToast('กรุณากรอกชื่อและเบอร์โทรศัพท์ให้ถูกต้อง', 'error');
+      return;
+    }
     if (delivery === 'shipping' && (!address || !/^\d{5}$/.test(postalCode))) {
       showToast('กรุณากรอกที่อยู่และรหัสไปรษณีย์ 5 หลัก', 'error');
       return;
     }
-    if (!customer.googleCredential && !isLocalPreview()) {
+    if (!customer.googleCredential || customer.googleCredential === 'local-preview-session') {
       showIdentityForGoogleReauthentication(customer);
-      showToast('ลงชื่อเข้าใช้ Google อีกครั้งก่อนบันทึกข้อมูลจัดส่ง', 'error');
+      showToast('ลงชื่อเข้าใช้ Google อีกครั้งก่อนบันทึกข้อมูล', 'error');
       return;
     }
 
     const updatedCustomer = {
       ...customer,
+      fullName,
+      phone,
       deliveryMethod: delivery,
       address,
       postalCode
     };
     button.disabled = true;
+    const originalButtonText = button.textContent;
+    button.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> กำลังบันทึก...';
     try {
-      if (!isLocalPreview()) await requestCustomerProfileUpdate(updatedCustomer);
+      await requestCustomerProfileUpdate(updatedCustomer);
       AppState.customer = updatedCustomer;
       persistCustomerSession('orders');
       renderOrdersCustomerSummary();
       ordersDeliveryFields.classList.add('hidden');
-      showToast(isLocalPreview() ? 'อัปเดตข้อมูลจัดส่งในโหมดทดสอบแล้ว' : 'บันทึกข้อมูลจัดส่งแล้ว', 'success');
+      showToast('บันทึกข้อมูลบุคคลทั่วไปแล้ว', 'success');
     } catch (error) {
       showToast(error.message || 'บันทึกข้อมูลจัดส่งไม่สำเร็จ', 'error');
     } finally {
       button.disabled = false;
+      button.textContent = originalButtonText;
     }
   });
   window.addEventListener('authong-order-saved', () => {
@@ -708,7 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('กรุณากรอกข้อมูลผู้สั่งจองก่อน', 'error');
         return;
       }
-      if (AppState.customer.type === 'general' && !AppState.customer.googleCredential && !isLocalPreview()) {
+      if (AppState.customer.type === 'general' && (!AppState.customer.googleCredential || AppState.customer.googleCredential === 'local-preview-session')) {
         showIdentityForGoogleReauthentication(AppState.customer);
         showToast('ลงชื่อเข้าใช้ Google อีกครั้งเพื่อสั่งจอง', 'error');
         return;
@@ -731,6 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       showPage('order');
       resetToNewMode();
+      setStudentLookupLoading(true, 'กำลังโหลดข้อมูล...');
       try { await refreshCustomerOrders(); } catch (_) { /* fall back to the single lookup below */ }
       const cachedOrder = customerOrdersCacheIsReady()
         ? AppState.customerOrders.find(order => order.category === category) || null
