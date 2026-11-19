@@ -888,9 +888,13 @@
     </div>
   </dialog>
 
-  <!-- Public fallback config is tracked; config.js can override it locally. -->
+  <!-- Public fallback config is tracked; local config.js only overrides localhost. -->
   <script src="config.example.js?v=20261119-4"></script>
-  <script src="config.js" onerror="console.info('[CONFIG] config.js not found')"></script>
+  <script>
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      document.write('<scr' + 'ipt src="config.js"></scr' + 'ipt>');
+    }
+  </script>
 
   <!-- Main JS -->
   <script src="app.js?v=20261119-7"></script>
