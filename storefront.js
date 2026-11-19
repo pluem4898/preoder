@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const identityFields = document.getElementById('identityFields');
   const whoCard = identityFields.closest('.who-card');
   const studentFields = document.getElementById('studentIdentityFields');
+  const identityStudentNumber = document.getElementById('identityStudentNumber');
+  const identityRoom = document.getElementById('identityRoom');
+  const identityStudentLookupStatus = document.getElementById('identityStudentLookupStatus');
   const generalFields = document.getElementById('generalIdentityFields');
   const googleLoginPanel = document.getElementById('googleLoginPanel');
   const googleLoginStatus = document.getElementById('googleLoginStatus');
@@ -41,6 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let customerOrdersPending = null;
   let customerOrdersPendingKey = '';
   let customerOrdersRequestGeneration = 0;
+  let studentIdentityLookupTimer = 0;
+  let studentIdentityLookupGeneration = 0;
 
   function showPage(page) {
     identityPanel.classList.toggle('hidden', page !== 'identity');
@@ -51,6 +56,44 @@ document.addEventListener('DOMContentLoaded', () => {
     siteHeader.classList.toggle('is-order-view', page === 'order');
     document.body.dataset.storefrontPage = page;
     document.dispatchEvent(new Event('storefront-page-change'));
+  }
+
+  function cancelStudentIdentityLookup() {
+    window.clearTimeout(studentIdentityLookupTimer);
+    studentIdentityLookupTimer = 0;
+    studentIdentityLookupGeneration++;
+    if (identityStudentLookupStatus) identityStudentLookupStatus.textContent = '';
+  }
+
+  function scheduleStudentIdentityLookup() {
+    window.clearTimeout(studentIdentityLookupTimer);
+    studentIdentityLookupTimer = 0;
+    const requestGeneration = ++studentIdentityLookupGeneration;
+    const studentNumber = String(identityStudentNumber.value || '').replace(/\s+/g, '');
+    const room = String(identityRoom.value || '').trim();
+    if (selectedType !== 'student' || !studentNumber || !room) {
+      identityStudentLookupStatus.textContent = '';
+      return;
+    }
+
+    identityStudentLookupStatus.textContent = 'กำลังโหลดข้อมูลเดิมจาก Google Sheets...';
+    studentIdentityLookupTimer = window.setTimeout(async () => {
+      studentIdentityLookupTimer = 0;
+      if (requestGeneration !== studentIdentityLookupGeneration) return;
+      AppState.customer = { type: 'student', studentNumber, room };
+      try {
+        if (!AppState.gasUrl) throw new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL');
+        const orders = await refreshCustomerOrders(true);
+        if (requestGeneration !== studentIdentityLookupGeneration) return;
+        identityStudentLookupStatus.textContent = orders.length
+          ? `โหลดข้อมูลสำเร็จ · พบ ${orders.length} รายการเดิม`
+          : 'โหลดข้อมูลสำเร็จ · ยังไม่มีรายการเดิม';
+      } catch (error) {
+        if (requestGeneration !== studentIdentityLookupGeneration) return;
+        identityStudentLookupStatus.textContent = 'โหลดข้อมูลจาก Google Sheets ไม่สำเร็จ ลองใหม่อีกครั้ง';
+        console.error('Student order preload error:', error);
+      }
+    }, 350);
   }
 
   function persistCustomerSession(page = 'home') {
@@ -427,11 +470,13 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('shippingAddress').value = AppState.customer.address;
       document.getElementById('shippingPostcode').value = AppState.customer.postalCode;
       deliveryMethod.value = AppState.customer.deliveryMethod;
+      if (profile.found) {
+        enterShoppingForCustomer(AppState.customer, 'โหลดข้อมูลเดิมแล้ว · เลือกซื้อเสื้อได้เลย');
+        return;
+      }
       generalFields.classList.remove('hidden');
       setDeliveryVisibility();
-      googleLoginStatus.textContent = profile.found
-        ? 'ลงชื่อเข้าใช้แล้ว · โหลดข้อมูลเดิมสำเร็จ'
-        : 'ลงชื่อเข้าใช้แล้ว · กรอกเบอร์โทรและเลือกรับเสื้อ';
+      googleLoginStatus.textContent = 'ลงชื่อเข้าใช้แล้ว · กรอกข้อมูลครั้งแรกเพื่อเริ่มซื้อ';
     } catch (error) {
       googleLoginStatus.textContent = error.message || 'ลงชื่อเข้าใช้ไม่สำเร็จ';
       showToast(googleLoginStatus.textContent, 'error');
@@ -476,6 +521,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.google?.accounts?.id) renderGoogleSignIn();
 
   const selectCustomerType = (type) => {
+    cancelStudentIdentityLookup();
+    customerOrdersRequestGeneration++;
+    customerOrdersCacheLoaded = false;
+    customerOrdersCacheKey = '';
+    customerOrdersPending = null;
+    customerOrdersPendingKey = '';
+    AppState.customerOrders = [];
+    setOrderCount(0);
     selectedType = type;
     AppState.customer = null;
     customerCards.forEach(card => {
@@ -492,6 +545,18 @@ document.addEventListener('DOMContentLoaded', () => {
     shippingFields.classList.add('hidden');
     if (type === 'general') renderGoogleSignIn();
   };
+
+  function enterShoppingForCustomer(customer, successMessage = '') {
+    AppState.customer = customer;
+    AppState.category = '';
+    updateHeaderCustomerChip(customer);
+    renderOrdersCustomerSummary();
+    persistCustomerSession('home');
+    showPage('home');
+    refreshCustomerOrders().catch(error => showToast(error.message || 'โหลดรายการออเดอร์ไม่สำเร็จ', 'error'));
+    collectionPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (successMessage) showToast(successMessage, 'success');
+  }
 
   function showIdentityForGoogleReauthentication(customer) {
     selectedType = 'general';
@@ -549,6 +614,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   customerCards.forEach(card => card.addEventListener('click', () => selectCustomerType(card.dataset.customerType)));
+  identityStudentNumber.addEventListener('change', scheduleStudentIdentityLookup);
+  identityRoom.addEventListener('change', scheduleStudentIdentityLookup);
+  document.addEventListener('authong-student-identity-change', (event) => {
+    if (AppState.customer?.type !== 'student') return;
+    AppState.customer = {
+      ...AppState.customer,
+      studentNumber: String(event.detail?.studentNumber || ''),
+      room: String(event.detail?.room || '')
+    };
+    customerOrdersRequestGeneration++;
+    customerOrdersCacheLoaded = false;
+    customerOrdersCacheKey = '';
+    customerOrdersPending = null;
+    customerOrdersPendingKey = '';
+    AppState.customerOrders = [];
+    setOrderCount(0);
+    if (AppState.customer.studentNumber && AppState.customer.room) {
+      updateHeaderCustomerChip(AppState.customer);
+      renderOrdersCustomerSummary();
+      persistCustomerSession('home');
+    } else {
+      document.getElementById('headerCustomerChip').classList.add('hidden');
+    }
+  });
   deliveryMethod.addEventListener('change', setDeliveryVisibility);
 
   document.getElementById('btnContinueIdentity').addEventListener('click', async () => {
@@ -579,6 +668,8 @@ document.addEventListener('DOMContentLoaded', () => {
       address: '',
       postalCode: ''
     };
+
+    if (selectedType === 'student') cancelStudentIdentityLookup();
 
     if (selectedType === 'student' && (!customer.studentNumber || !customer.room)) {
       showToast('กรุณาเลือกเลขที่และห้องเรียน', 'error');
@@ -614,17 +705,11 @@ document.addEventListener('DOMContentLoaded', () => {
       continueButton.innerHTML = originalContinueMarkup;
     }
 
-    AppState.customer = customer;
-    AppState.category = '';
-    updateHeaderCustomerChip(customer);
-    renderOrdersCustomerSummary();
-    persistCustomerSession('home');
-    showPage('home');
-    refreshCustomerOrders().catch(error => showToast(error.message || 'โหลดรายการออเดอร์ไม่สำเร็จ', 'error'));
-    collectionPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    enterShoppingForCustomer(customer);
   });
 
   document.getElementById('btnLogoutCustomer').addEventListener('click', () => {
+    cancelStudentIdentityLookup();
     try { sessionStorage.removeItem(CUSTOMER_SESSION_KEY); } catch (_) {}
     AppState.customer = null;
     AppState.customerOrders = [];

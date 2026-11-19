@@ -75,6 +75,8 @@ const AppState = {
   customerOrders: [],
   orders: []
 };
+let studentLookupGeneration = 0;
+let studentLookupDebounceTimer = 0;
 
 // Initial Seed Orders - Removed (using Google Sheets only)
 const DEFAULT_DEMO_ORDERS = [];
@@ -261,6 +263,42 @@ function setStudentNumberSelection(studentNumber) {
   DOM.legacyStudentNumberField.hidden = !legacy;
 }
 
+function invalidateStudentLookup() {
+  window.clearTimeout(studentLookupDebounceTimer);
+  studentLookupDebounceTimer = 0;
+  studentLookupGeneration++;
+}
+
+function scheduleStudentLookup() {
+  invalidateStudentLookup();
+  const requestId = studentLookupGeneration;
+  const studentNumber = getStudentNumberInput().value.replace(/\s+/g, '');
+  const room = DOM.inputRoom.value.trim();
+  AppState.studentNumber = studentNumber;
+  AppState.room = room;
+
+  if (AppState.customer?.type === 'student') {
+    AppState.customer = { ...AppState.customer, studentNumber, room };
+    document.dispatchEvent(new CustomEvent('authong-student-identity-change', {
+      detail: { studentNumber, room }
+    }));
+  }
+
+  hideFormContent();
+  resetToNewMode();
+  if (!LEGACY_STUDENT_NUMBER_PATTERN.test(studentNumber) || !room) {
+    DOM.studentLookupStatus.textContent = '';
+    setStudentLookupLoading(false);
+    return;
+  }
+
+  DOM.studentLookupStatus.textContent = 'กำลังโหลดข้อมูลจาก Google Sheets...';
+  studentLookupDebounceTimer = window.setTimeout(() => {
+    studentLookupDebounceTimer = 0;
+    lookupStudentAndShowForm(studentNumber, room, '', undefined, requestId);
+  }, 350);
+}
+
 function updateOrderTotals() {
   const quantity = Math.max(1, Math.min(5, Number(DOM.inputQuantity?.value || AppState.quantity || 1)));
   const total = JERSEY_PRICE * quantity;
@@ -299,6 +337,8 @@ function bindEvents() {
 
   // Student number + room identify and load an existing order.
   DOM.btnLookupStudent.addEventListener('click', () => {
+    invalidateStudentLookup();
+    const requestId = studentLookupGeneration;
     const input = getStudentNumberInput();
     const studentNumber = input.value.replace(/\s+/g, '');
     const room = DOM.inputRoom.value.trim();
@@ -317,7 +357,7 @@ function bindEvents() {
       return;
     }
 
-    lookupStudentAndShowForm(studentNumber, room);
+    lookupStudentAndShowForm(studentNumber, room, '', undefined, requestId);
   });
 
   // Personalization inputs
@@ -345,11 +385,15 @@ function bindEvents() {
 
   DOM.inputStudentNumber.addEventListener('change', () => {
     DOM.legacyStudentNumberField.hidden = DOM.inputStudentNumber.value !== 'legacy';
+    scheduleStudentLookup();
   });
 
   DOM.inputRoom.addEventListener('change', (e) => {
     AppState.room = e.target.value;
+    scheduleStudentLookup();
   });
+
+  DOM.inputLegacyStudentNumber.addEventListener('change', scheduleStudentLookup);
 
   // Quick Tools
   if (DOM.btnCapsName) {
@@ -1219,7 +1263,9 @@ function setStudentLookupLoading(isLoading, label = 'กำลังตรวจ
   }
 }
 
-async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', prefetchedRecord) {
+async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', prefetchedRecord, requestId = ++studentLookupGeneration) {
+  window.clearTimeout(studentLookupDebounceTimer);
+  studentLookupDebounceTimer = 0;
   hideFormContent();
   resetToNewMode();
   const customer = AppState.customer || { type: 'student', studentNumber, room };
@@ -1258,6 +1304,7 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', pref
       const response = await fetch(searchUrl.toString(), { cache: 'no-store' });
       result = await response.json();
     }
+    if (requestId !== studentLookupGeneration) return;
     if (!result || result.status !== 'success') {
       throw new Error(result && result.message ? result.message : 'Invalid response from Google Sheets.');
     }
@@ -1303,11 +1350,12 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', pref
     DOM.studentLookupStatus.textContent = '';
     showToast('พร้อมเริ่มสั่งจอง', 'success');
   } catch (err) {
+    if (requestId !== studentLookupGeneration) return;
     console.error('Google Sheets lookup error:', err);
     DOM.studentLookupStatus.textContent = 'เชื่อมต่อ Google Sheets ไม่สำเร็จ ลองตรวจสอบ Apps Script';
     showToast('เกิดข้อผิดพลาดในการค้นหา Google Sheets', 'error');
   } finally {
-    setStudentLookupLoading(false);
+    if (requestId === studentLookupGeneration) setStudentLookupLoading(false);
   }
 }
 function loadOrdersDatabase() {
@@ -1405,6 +1453,7 @@ function resetToNewMode() {
 }
 
 function resetForm() {
+  invalidateStudentLookup();
   AppState.screenName = '';
   AppState.screenNumber = '10';
   AppState.studentNumber = '';

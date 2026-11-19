@@ -1479,6 +1479,15 @@ body.storefront-order-view { --keyboard-inset: 0px; }
   padding-top: 88px !important;
 }
 
+.identity-student-lookup-status {
+  grid-column: 1 / -1;
+  min-height: 14px;
+  margin: -2px 0 0;
+  color: #f4d5fa;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 @media (min-width: 641px) {
   #siteHeader:not(.hidden) + main {
     padding-top: 100px !important;
