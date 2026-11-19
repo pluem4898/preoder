@@ -356,25 +356,52 @@ document.addEventListener('DOMContentLoaded', () => {
   async function requestGoogleProfile(credential) {
     if (!AppState.gasUrl) throw new Error('ตั้งค่า Apps Script URL ก่อนลงชื่อเข้าใช้');
     const nonce = crypto.randomUUID().replace(/-/g, '');
-    await fetch(AppState.gasUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ action: 'googleProfile', credential, nonce })
-    });
+    const postController = new AbortController();
+    const postTimeout = setTimeout(() => postController.abort(), 25000);
+    try {
+      await fetch(AppState.gasUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ action: 'googleProfile', credential, nonce }),
+        signal: postController.signal
+      });
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error('Google ใช้เวลาตรวจสอบนานเกินไป กรุณาลองอีกครั้ง');
+      throw new Error('เชื่อมต่อ Google Sheets ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง');
+    } finally {
+      clearTimeout(postTimeout);
+    }
 
-    for (let attempt = 0; attempt < 10; attempt++) {
-      if (attempt) await new Promise(resolve => setTimeout(resolve, 350));
+    const deadline = Date.now() + 20000;
+    for (let attempt = 0; attempt < 20 && Date.now() < deadline; attempt++) {
+      if (attempt) await new Promise(resolve => setTimeout(resolve, Math.min(300 + attempt * 180, 1200)));
       const url = new URL(AppState.gasUrl);
       url.searchParams.set('action', 'consumeGoogleProfile');
       url.searchParams.set('nonce', nonce);
       url.searchParams.set('_', Date.now().toString());
-      const response = await fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer' });
-      const result = await response.json();
+      const pollController = new AbortController();
+      const pollTimeout = setTimeout(() => pollController.abort(), Math.min(7000, Math.max(1000, deadline - Date.now())));
+      let result;
+      try {
+        const response = await fetch(url, {
+          cache: 'no-store', referrerPolicy: 'no-referrer', signal: pollController.signal
+        });
+        result = await response.json();
+      } catch (error) {
+        if (error.name === 'AbortError') throw new Error('Google Sheets ไม่ตอบกลับ กรุณาตรวจ Apps Script Web App แล้วลองใหม่');
+        throw new Error('อ่านข้อมูลจาก Google Sheets ไม่สำเร็จ กรุณาลองอีกครั้ง');
+      } finally {
+        clearTimeout(pollTimeout);
+      }
       if (result.status === 'success' && result.profile) return result.profile;
       if (result.status === 'error') throw new Error(result.message || 'ตรวจสอบบัญชี Google ไม่สำเร็จ');
+      if (result.status === 'success' && !result.profile) {
+        throw new Error('Apps Script ที่เชื่อมอยู่ยังเป็นเวอร์ชันเก่า กรุณาอัปเดต Code.gs แล้ว Deploy เวอร์ชันใหม่');
+      }
+      if (result.status !== 'pending') throw new Error('Apps Script ส่งข้อมูลกลับมาไม่ถูกต้อง กรุณาตรวจ URL ที่ตั้งค่าไว้');
     }
-    throw new Error('รอข้อมูลบัญชีนานเกินไป ลองลงชื่อเข้าใช้อีกครั้ง');
+    throw new Error('Google Sheets ยังประมวลผลไม่เสร็จ กรุณาลองใหม่อีกครั้ง');
   }
 
   async function handleGoogleCredential(response) {

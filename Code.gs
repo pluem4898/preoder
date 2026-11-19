@@ -73,13 +73,24 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  var data = parsePostData_(e);
+  var action = String(data.action || '');
+
+  // Profile lookup is read-only. Keep it outside the global write lock so an
+  // unrelated order or slip write cannot make Google Sign-In time out.
+  if (action === 'googleProfile') {
+    try {
+      return handleGoogleProfile_(data);
+    } catch (err) {
+      return createJsonResponse_({ status: 'error', message: String(err && err.message || err) });
+    }
+  }
+
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) return createJsonResponse_({ status: 'error', message: 'ระบบกำลังบันทึก กรุณาลองอีกครั้ง' });
   try {
+    if (action === 'updateCustomer') return updateCustomerProfile_(data);
     ensureWorkbook_();
-    var data = parsePostData_(e);
-    if (String(data.action || '') === 'googleProfile') return handleGoogleProfile_(data);
-    if (String(data.action || '') === 'updateCustomer') return updateCustomerProfile_(data);
     var customer = data.customer || {};
     var type = String(data.customerType || customer.type || '');
     var category = String(data.category || '').toUpperCase();
