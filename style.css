@@ -1462,3 +1462,25 @@ body.storefront-order-view { --keyboard-inset: 0px; }
     overflow: visible !important;
   }
 }
+
+/* Keep the storefront toolbar attached to the viewport while scrolling. */
+#siteHeader:not(.hidden) {
+  position: fixed !important;
+  top: 0 !important;
+  left: 50%;
+  z-index: 1000 !important;
+  width: 100%;
+  max-width: 1260px;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
+#siteHeader:not(.hidden) + main {
+  padding-top: 88px !important;
+}
+
+@media (min-width: 641px) {
+  #siteHeader:not(.hidden) + main {
+    padding-top: 100px !important;
+  }
+}
