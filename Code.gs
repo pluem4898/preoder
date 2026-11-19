@@ -240,6 +240,13 @@ function setupNewOrderSheets() {
   }
 }
 
+// Run once from the Apps Script editor as the deployment owner, then approve
+// the external request permission used to validate Google Sign-In tokens.
+function authorizeExternalRequests() {
+  var response = UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
+  return 'UrlFetchApp authorization is ready (HTTP ' + response.getResponseCode() + ').';
+}
+
 // Run this when you only want to synchronize legacy rows into the new tabs.
 // It keeps the original Drive slip files and reuses their IDs and URLs.
 function runLegacyMigrationOnly() {

@@ -612,9 +612,6 @@ function initJerseyDock() {
     const stageRect = jerseyStage.getBoundingClientRect();
     if (!canDock) {
       previewDocked = false;
-    } else if (isEditing) {
-      // Keep the live shirt preview in the expanded navbar while a print field is active.
-      previewDocked = true;
     } else if (previewDocked) {
       // Hysteresis prevents the preview jumping in and out at the navbar edge.
       if (stageRect.top > navBottom + 24) previewDocked = false;
@@ -624,7 +621,6 @@ function initJerseyDock() {
 
     const nextParent = previewDocked ? navCard : jerseyStage;
     if (jersey.parentElement !== nextParent) nextParent.append(jersey);
-    document.body.classList.toggle('is-mobile-preview-docked', previewDocked && jersey.parentElement === navCard);
     jersey.classList.toggle('is-docked', previewDocked);
     jerseyStage.classList.toggle('is-preview-docked', previewDocked);
     navCard.classList.toggle('jersey-preview-expanded', previewDocked);

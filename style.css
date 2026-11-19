@@ -482,10 +482,6 @@ body {
     overflow: visible;
   }
 
-  body.is-mobile-preview-docked .jersey-preview-column {
-    display: none !important;
-  }
-
   .jersey-card-wrapper {
     max-width: 228px;
     transition: none;
@@ -1456,8 +1452,8 @@ body.storefront-order-view { --keyboard-inset: 0px; }
     max-width: none !important;
   }
   .jersey-stage-container.is-preview-docked {
-    min-height: 180px !important;
-    height: 180px !important;
+    min-height: 0 !important;
+    height: 0 !important;
     margin: 0 !important;
     overflow: visible !important;
   }
