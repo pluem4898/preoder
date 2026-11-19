@@ -627,39 +627,68 @@ function removeOrderFromCategory_(category, orderId) {
 }
 
 function onEdit(e) {
-  if (!e || !e.range || e.range.getRow() < 2) return;
+  if (!e || !e.range || e.range.getRow() < 2
+      || e.range.getNumRows() !== 1 || e.range.getNumColumns() !== 1) return;
+  // Simple triggers may only edit the spreadsheet they are bound to. Use the
+  // event's spreadsheet instead of openById(), which requires authorization.
+  var spreadsheet = e.source;
+  if (!spreadsheet) return;
   var sheet = e.range.getSheet();
   var name = sheet.getName();
-  if (['ORDERS_ALL'].concat(CATEGORY_NAMES).indexOf(name) < 0) return;
   var column = e.range.getColumn();
-  if ([23, 24, 25].indexOf(column) < 0) return;
-  var orderId = String(sheet.getRange(e.range.getRow(), 2).getDisplayValue());
+  var isPaymentStatusEdit = name === 'PAYMENTS' && column === 8;
+  var isOrderSheet = ['ORDERS_ALL'].concat(CATEGORY_NAMES).indexOf(name) >= 0;
+  if (!isPaymentStatusEdit && (!isOrderSheet || [23, 24, 25].indexOf(column) < 0)) return;
+
+  var row = e.range.getRow();
+  var orderId = String(sheet.getRange(row, isPaymentStatusEdit ? 3 : 2).getDisplayValue()).trim();
   if (!orderId) return;
-  var lock = LockService.getDocumentLock();
+
+  var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return;
   try {
     var value = e.range.getValue();
-    var masterRow = findRowByValue_(getSheet_('ORDERS_ALL'), 2, orderId);
-    if (masterRow && name !== 'ORDERS_ALL') getSheet_('ORDERS_ALL').getRange(masterRow, column).setValue(value);
-    CATEGORY_NAMES.forEach(function(category) {
-      if (category === name) return;
-      var row = findRowByValue_(getSheet_(category), 2, orderId);
-      if (row) getSheet_(category).getRange(row, column).setValue(value);
-    });
-    if (column === 23) updatePaymentStatus_(orderId, value);
+    var targetColumn = isPaymentStatusEdit ? 23 : column;
+    syncOrderColumn_(spreadsheet, orderId, targetColumn, value, isPaymentStatusEdit ? 'PAYMENTS' : name);
+    if (targetColumn === 23) {
+      if (isPaymentStatusEdit) updateReviewedAt_(sheet, row, value);
+      else updatePaymentStatus_(orderId, value, spreadsheet);
+    }
+    SpreadsheetApp.flush();
   } finally {
     lock.releaseLock();
   }
 }
 
-function updatePaymentStatus_(orderId, status) {
-  var sheet = getSheet_('PAYMENTS');
+function syncOrderColumn_(spreadsheet, orderId, column, value, sourceName) {
+  var master = spreadsheet.getSheetByName('ORDERS_ALL');
+  if (!master) return;
+  var masterRow = findRowByValue_(master, 2, orderId);
+  if (masterRow && sourceName !== 'ORDERS_ALL') master.getRange(masterRow, column).setValue(value);
+  CATEGORY_NAMES.forEach(function(category) {
+    if (category === sourceName) return;
+    var sheet = spreadsheet.getSheetByName(category);
+    if (!sheet) return;
+    var row = findRowByValue_(sheet, 2, orderId);
+    if (row) sheet.getRange(row, column).setValue(value);
+  });
+}
+
+function updateReviewedAt_(sheet, row, status) {
+  sheet.getRange(row, 9).setValue(status === 'ผ่าน'
+    ? Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss')
+    : '');
+}
+
+function updatePaymentStatus_(orderId, status, spreadsheet) {
+  var sheet = spreadsheet.getSheetByName('PAYMENTS');
+  if (!sheet) return;
   if (sheet.getLastRow() < 2) return;
   var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, PAYMENT_HEADERS.length).getDisplayValues();
   for (var i = rows.length - 1; i >= 0; i--) {
     if (rows[i][2] === orderId) {
       sheet.getRange(i + 2, 8).setValue(status);
-      if (status === 'ผ่าน') sheet.getRange(i + 2, 9).setValue(Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss'));
+      updateReviewedAt_(sheet, i + 2, status);
       break;
     }
   }
