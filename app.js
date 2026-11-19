@@ -610,7 +610,8 @@ function initJerseyDock() {
     const navRect = navCard.getBoundingClientRect();
     const navBottom = navRect.top + 48;
     const stageRect = jerseyStage.getBoundingClientRect();
-    if (!canDock) {
+    const isAtPageTop = window.scrollY <= 2;
+    if (!canDock || isAtPageTop) {
       previewDocked = false;
     } else if (previewDocked) {
       // Hysteresis prevents the preview jumping in and out at the navbar edge.
