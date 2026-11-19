@@ -76,18 +76,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    identityStudentLookupStatus.textContent = 'กำลังโหลดข้อมูลเดิมจาก Google Sheets...';
+    identityStudentLookupStatus.textContent = '';
     studentIdentityLookupTimer = window.setTimeout(async () => {
       studentIdentityLookupTimer = 0;
       if (requestGeneration !== studentIdentityLookupGeneration) return;
       AppState.customer = { type: 'student', studentNumber, room };
       try {
         if (!AppState.gasUrl) throw new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL');
-        const orders = await refreshCustomerOrders(true);
+        await refreshCustomerOrders(true);
         if (requestGeneration !== studentIdentityLookupGeneration) return;
-        identityStudentLookupStatus.textContent = orders.length
-          ? `โหลดข้อมูลสำเร็จ · พบ ${orders.length} รายการเดิม`
-          : 'โหลดข้อมูลสำเร็จ · ยังไม่มีรายการเดิม';
+        identityStudentLookupStatus.textContent = '';
       } catch (error) {
         if (requestGeneration !== studentIdentityLookupGeneration) return;
         identityStudentLookupStatus.textContent = 'โหลดข้อมูลจาก Google Sheets ไม่สำเร็จ ลองใหม่อีกครั้ง';
@@ -864,7 +862,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       showPage('order');
       resetToNewMode();
-      setStudentLookupLoading(true, 'กำลังโหลดข้อมูล...');
+      setStudentLookupLoading(true);
       try { await refreshCustomerOrders(); } catch (_) { /* fall back to the single lookup below */ }
       const cachedOrder = customerOrdersCacheIsReady()
         ? AppState.customerOrders.find(order => order.category === category) || null

@@ -82,7 +82,16 @@ function doPost(e) {
     try {
       return handleGoogleProfile_(data);
     } catch (err) {
-      return createJsonResponse_({ status: 'error', message: String(err && err.message || err) });
+      var message = String(err && err.message || err);
+      var nonce = String(data.nonce || '');
+      if (/^[a-f0-9]{32,64}$/i.test(nonce)) {
+        CacheService.getScriptCache().put(
+          'AUTHONG_GOOGLE_PROFILE_' + nonce,
+          JSON.stringify({ status: 'error', message: message }),
+          90
+        );
+      }
+      return createJsonResponse_({ status: 'error', message: message });
     }
   }
 

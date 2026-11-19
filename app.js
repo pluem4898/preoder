@@ -292,7 +292,7 @@ function scheduleStudentLookup() {
     return;
   }
 
-  DOM.studentLookupStatus.textContent = 'กำลังโหลดข้อมูลจาก Google Sheets...';
+  DOM.studentLookupStatus.textContent = '';
   studentLookupDebounceTimer = window.setTimeout(() => {
     studentLookupDebounceTimer = 0;
     lookupStudentAndShowForm(studentNumber, room, '', undefined, requestId);
@@ -1253,9 +1253,9 @@ function showFormContent() {
   if (DOM.submitButtonSection) DOM.submitButtonSection.classList.remove('hidden');
 }
 
-function setStudentLookupLoading(isLoading, label = 'กำลังตรวจสอบ...') {
+function setStudentLookupLoading(isLoading) {
   if (DOM.studentLookupSpinner) DOM.studentLookupSpinner.classList.toggle('hidden', !isLoading);
-  if (DOM.studentLookupText) DOM.studentLookupText.textContent = isLoading ? label : 'ตรวจสอบข้อมูล / เริ่มจอง';
+  if (DOM.studentLookupText) DOM.studentLookupText.textContent = 'ตรวจสอบข้อมูล / เริ่มจอง';
   if (DOM.btnLookupStudent) {
     DOM.btnLookupStudent.disabled = isLoading;
     DOM.btnLookupStudent.setAttribute('aria-busy', String(isLoading));
@@ -1275,7 +1275,7 @@ async function lookupStudentAndShowForm(studentNumber, room, slipCode = '', pref
     setStudentNumberSelection(studentNumber);
     DOM.inputRoom.value = room;
   }
-  setStudentLookupLoading(true, 'กำลังตรวจสอบ...');
+  setStudentLookupLoading(true);
   DOM.studentLookupStatus.textContent = '';
 
   try {
