@@ -6,15 +6,16 @@ var SPREADSHEET_ID = '1WOI_8VSHi_6FIaifxPNuX7hTHEElSVKeR8InFHSQZLw';
 var SLIP_FOLDER_NAME = 'Authong Preorder Slips 2026';
 // Paste the OAuth Web Client ID here. It is public configuration, not a secret.
 var GOOGLE_CLIENT_ID = '815743815680-3314m7scb7nkotsjn1vf68t1uvt69kbe.apps.googleusercontent.com';
-var CATEGORY_NAMES = ['ORIGINAL', 'FOOTBALL', 'BASKETBALL', 'AUHISTORY'];
+var CATEGORY_NAMES = ['ORIGINAL', 'FOOTBALL', 'VOLLEYBALL', 'BASKETBALL', 'AUHISTORY'];
 var CATEGORY_TITLES = {
   ORIGINAL: 'เสื้อคอลเลกชันต้นฉบับ',
   FOOTBALL: 'เสื้อคอลเลกชันฟุตบอล',
+  VOLLEYBALL: 'เสื้อคอลเลกชันวอลเลย์บอล',
   BASKETBALL: 'เสื้อคอลเลกชันบาสเกตบอล',
   AUHISTORY: 'เสื้อคอลเลกชันประวัติอู่ทอง'
 };
-// Current site price is 279 baht for each collection. Change these values here if prices differ.
-var PRICE_BY_CATEGORY = { ORIGINAL: 279, FOOTBALL: 279, BASKETBALL: 279, AUHISTORY: 279 };
+// Prices for new orders by collection.
+var PRICE_BY_CATEGORY = { ORIGINAL: 279, FOOTBALL: 269, VOLLEYBALL: 279, BASKETBALL: 279, AUHISTORY: 279 };
 var ORDER_HEADERS = [
   'Created At', 'Order ID', 'Customer ID', 'Customer Type', 'Collection', 'Product Name',
   'Shirt Name (Print)', 'Shirt Number (Print)', 'Size', 'Quantity', 'Unit Price', 'Line Total',
@@ -134,7 +135,12 @@ function doPost(e) {
     }
     if (!printName || printName.length > 16) throw new Error('กรอกชื่อเสื้อไม่ถูกต้อง');
     if (!/^[0-9]{1,2}$/.test(jerseyNumber)) throw new Error('เบอร์เสื้อต้องเป็นตัวเลข 1-2 หลัก');
-    if (['2S', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'].indexOf(size) < 0) throw new Error('เลือกไซส์เสื้อ');
+    var allowedSizes = category === 'VOLLEYBALL'
+      ? ['SS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL']
+      : category === 'BASKETBALL'
+        ? ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL']
+        : ['2S', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+    if (allowedSizes.indexOf(size) < 0) throw new Error('เลือกไซส์เสื้อ');
     if (quantity < 1 || quantity > 5) throw new Error('จำนวนเสื้อต้องอยู่ระหว่าง 1-5 ตัว');
 
     var customerId = makeCustomerId_(type, studentNumber, room, phone, googleClaims ? googleClaims.sub : '');
@@ -186,8 +192,8 @@ function doPost(e) {
     var order = {
       createdAt: oldOrder ? oldOrder[oldMap['Created At'] - 1] : timestamp,
       orderId: orderId, customerId: customerId, customerType: type, category: category,
-      productName: CATEGORY_TITLES[category], printName: printName, jerseyNumber: jerseyNumber,
-      size: size, quantity: quantity, unitPrice: PRICE_BY_CATEGORY[category],
+      productName: CATEGORY_TITLES[category] + (category === 'FOOTBALL' ? (data.footballModel === 'goalkeeper' ? ' · ผู้รักษาประตู' : ' · นักฟุตบอล') : ''), printName: printName, jerseyNumber: jerseyNumber,
+      size: size, quantity: quantity, unitPrice: PRICE_BY_CATEGORY[category] + (category === 'VOLLEYBALL' ? ({ '4XL': 10, '5XL': 20, '6XL': 30 }[size] || 0) : 0),
       studentNumber: studentNumber, room: room, customerName: fullName || String(customer.studentName || '').trim(),
       phone: phone, deliveryMethod: deliveryMethod, recipient: recipient, address: address,
       postcode: postcode, slipFileId: slipFileId, slipLink: slipLink,

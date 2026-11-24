@@ -26,6 +26,46 @@ const JERSEY_CONFIG = {
 // 1. APPLICATION STATE
 // ==========================================
 const JERSEY_PRICE = 279;
+function getJerseyPrice() {
+  if (AppState.category === 'VOLLEYBALL') return 279 + ({ '4XL': 10, '5XL': 20, '6XL': 30 }[AppState.size] || 0);
+  return AppState.category === 'FOOTBALL' ? 269 : JERSEY_PRICE;
+}
+
+function updateCollectionSizes() {
+  const volleyball = AppState.category === 'VOLLEYBALL';
+  const basketball = AppState.category === 'BASKETBALL';
+  const sizes = ['2S', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'];
+  DOM.sizeBtns.forEach(button => {
+    if (['2S', 'SS', 'XS'].includes(button.dataset.size)) button.dataset.size = volleyball ? 'SS' : basketball ? 'XS' : '2S';
+    const index = sizes.indexOf(['SS', 'XS'].includes(button.dataset.size) ? '2S' : button.dataset.size);
+    button.classList.toggle('hidden', button.dataset.size === '6XL' && !volleyball);
+    const label = button.dataset.size;
+    button.textContent = `${label} (${(volleyball || basketball ? 34 : 36) + index * 2}")${volleyball && index >= 7 ? ` +฿${(index - 6) * 10}` : ''}`;
+  });
+  document.getElementById('volleyballSizeNote').classList.toggle('hidden', !volleyball);
+  document.getElementById('collectionSizeLabel').textContent = volleyball ? 'ขนาดเสื้อ (IAM Design)' : basketball ? 'ขนาดเสื้อ (TRC Garment)' : 'ขนาดเสื้อ (Singha Design Size)';
+  if (!volleyball && AppState.size === '6XL') AppState.size = 'L';
+}
+
+function setFootballModel(model = 'player') {
+  AppState.footballModel = model === 'goalkeeper' ? 'goalkeeper' : 'player';
+  const football = AppState.category === 'FOOTBALL';
+  document.getElementById('footballModelField').classList.toggle('hidden', !football);
+  document.querySelectorAll('[data-order-football-model]').forEach(card => {
+    card.setAttribute('aria-pressed', String(card.dataset.orderFootballModel === AppState.footballModel));
+  });
+  DOM.jerseyCardWrapper.classList.toggle('is-football', football);
+  DOM.jerseyCardWrapper.classList.toggle('is-volleyball', AppState.category === 'VOLLEYBALL');
+  DOM.jerseyCardWrapper.classList.toggle('is-basketball', AppState.category === 'BASKETBALL');
+  updateCollectionSizes();
+  for (const { element } of Object.values(JERSEY_VIEWS)) {
+    element.classList.remove('artwork-ready');
+    element.style.backgroundImage = '';
+  }
+  document.querySelectorAll('[data-jersey-price]').forEach(label => { label.textContent = `฿${getJerseyPrice()}`; });
+  updateOrderTotals();
+  updateJerseyArtwork(AppState.viewSide);
+}
 const APP_CONFIG = window.CONFIG || {};
 function createOrderId() {
   const suffix = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
@@ -300,8 +340,10 @@ function scheduleStudentLookup() {
 }
 
 function updateOrderTotals() {
+  document.getElementById('collectionOriginalPrice').classList.toggle('hidden', AppState.category !== 'FOOTBALL');
+  document.querySelectorAll('[data-jersey-price]').forEach(label => { label.textContent = `฿${getJerseyPrice()}`; });
   const quantity = Math.max(1, Math.min(5, Number(DOM.inputQuantity?.value || AppState.quantity || 1)));
-  const total = JERSEY_PRICE * quantity;
+  const total = getJerseyPrice() * quantity;
   if (DOM.orderTotalDisplay) DOM.orderTotalDisplay.textContent = `฿${total.toLocaleString('th-TH')}`;
   document.querySelectorAll('[data-total-price]').forEach(label => {
     label.textContent = `฿${total.toLocaleString('th-TH')}`;
@@ -324,6 +366,9 @@ function bindEvents() {
   const openSizeGuide = () => {
     if (!DOM.modalSizeGuide) return;
     prepareJerseyArtwork(DOM.sizeGuideJerseyEl, 'front');
+    const volleyball = AppState.category === 'VOLLEYBALL';
+    DOM.modalSizeGuide.classList.toggle('is-volleyball-guide', volleyball);
+    DOM.modalSizeGuide.classList.toggle('is-basketball-guide', AppState.category === 'BASKETBALL');
     DOM.modalSizeGuide.classList.remove('hidden');
     document.documentElement.classList.add('size-guide-open');
     document.body.classList.add('size-guide-open');
@@ -1032,6 +1077,7 @@ function selectJerseySize(size) {
   AppState.size = size;
   DOM.sizeBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.size === size));
   renderJerseyChanges();
+  updateOrderTotals();
 }
 
 function getJerseyChanges(original, updated) {
@@ -1118,6 +1164,8 @@ function centerJerseyText(element, { y, maxWidth, top, bottom }) {
 }
 
 function renderJerseyPrint() {
+  renderBasketballPrint();
+  renderFootballPrint();
   const name = formatScreenName(AppState.screenName);
   const number = String(AppState.screenNumber ?? '').trim();
   const isEditing = AppState.mode === 'edit';
@@ -1160,6 +1208,175 @@ function renderJerseyPrint() {
   }
 }
 
+function getFootballInkBox(text) {
+  const context = document.createElement('canvas').getContext('2d');
+  const style = getComputedStyle(text);
+  context.font = `${style.fontStyle} ${style.fontWeight} ${text.getAttribute('font-size')}px ${style.fontFamily}`;
+  context.textAlign = 'center';
+  const metrics = context.measureText(text.textContent);
+  return {
+    x: Number(text.getAttribute('x')) - metrics.actualBoundingBoxLeft,
+    y: Number(text.getAttribute('y')) - metrics.actualBoundingBoxAscent,
+    width: metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
+    height: metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
+  };
+}
+
+function fitFootballText(text, centerX, top, height, width, stretch = false) {
+  text.removeAttribute('transform');
+  if (!text.textContent) return;
+  const box = getFootballInkBox(text);
+  if (!box.width || !box.height) return;
+  const scaleY = height / box.height;
+  const scaleX = stretch ? width / box.width : Math.min(scaleY, width / box.width);
+  text.setAttribute('transform', `translate(${centerX - (box.x + box.width / 2) * scaleX} ${top - box.y * scaleY}) scale(${scaleX} ${scaleY})`);
+}
+
+function renderFootballNumberCrests(svg, keeper) {
+  svg.querySelectorAll('.football-number-crest').forEach(crest => crest.remove());
+  const text = svg.querySelector('.football-print-number');
+  const digits = text.textContent;
+  if (!digits || svg.style.display === 'none') return;
+  const box = getFootballInkBox(text);
+  const size = box.height;
+  const totalWidth = text.getComputedTextLength();
+  if (!totalWidth) return;
+  const baseline = box.y + box.height;
+  const matrix = text.transform.baseVal.consolidate()?.matrix;
+  const scaleX = matrix?.a ?? 1;
+  const scaleY = matrix?.d ?? 1;
+  const offsetX = matrix?.e ?? 0;
+  const offsetY = matrix?.f ?? 0;
+  const crestWidth = size * .085 * scaleY;
+  const crestHeight = size * .11 * scaleY;
+  for (let index = 0; index < digits.length; index++) {
+    const digitBox = text.getExtentOfChar(index);
+    const centerX = digitBox.x + digitBox.width * (digits[index] === '7' ? .35 : .5);
+    const crest = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    crest.classList.add('football-number-crest');
+    crest.setAttribute('href', keeper ? './football-crest-orange.png' : './football-crest-purple.png');
+    crest.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    crest.setAttribute('width', String(crestWidth));
+    crest.setAttribute('height', String(crestHeight));
+    crest.setAttribute('x', String(centerX * scaleX + offsetX - crestWidth / 2));
+    crest.setAttribute('y', String((baseline - size * .145) * scaleY + offsetY));
+    svg.append(crest);
+  }
+}
+
+function renderBasketballPrint() {
+  const active = AppState.category === 'BASKETBALL';
+  const ns = 'http://www.w3.org/2000/svg';
+  for (const side of ['back', 'front', 'both']) {
+    const host = JERSEY_VIEWS[side].element;
+    const views = side === 'both' ? ['back', 'front'] : [side];
+    for (const face of views) {
+      let svg = host.querySelector(`.basketball-print-${face}`);
+      if (!svg) {
+        svg = document.createElementNS(ns, 'svg');
+        svg.classList.add('basketball-print', `basketball-print-${face}`);
+        svg.setAttribute('viewBox', '0 0 880 1120');
+        svg.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS(ns, 'path');
+        path.id = `basketball-name-arc-${side}-${face}`;
+        path.setAttribute('d', 'M 205 365 Q 440 235 675 365');
+        path.setAttribute('fill', 'none');
+        const defs = document.createElementNS(ns, 'defs');
+        defs.append(path);
+        const name = document.createElementNS(ns, 'text');
+        name.classList.add('basketball-print-name');
+        name.setAttribute('text-anchor', 'middle');
+        const textPath = document.createElementNS(ns, 'textPath');
+        textPath.setAttribute('href', `#${path.id}`);
+        textPath.setAttribute('startOffset', '50%');
+        name.append(textPath);
+        const number = document.createElementNS(ns, 'text');
+        number.classList.add('basketball-print-number');
+        number.setAttribute('text-anchor', 'middle');
+        number.setAttribute('x', '440');
+        number.setAttribute('y', '700');
+        number.setAttribute('font-size', '400');
+        svg.append(defs, name, number);
+        host.append(svg);
+      }
+      svg.style.display = active ? 'block' : 'none';
+      if (!active) continue;
+      const name = formatScreenName(AppState.screenName) || 'PLAYER';
+      svg.querySelector('textPath').textContent = face === 'back' ? name : '';
+      svg.querySelector('.basketball-print-name').setAttribute('font-size', String(Math.min(72, 510 / Math.max(name.length * .65, 1))));
+      const number = svg.querySelector('.basketball-print-number');
+      number.textContent = String(AppState.screenNumber || '56');
+      const width = [...number.textContent].reduce((sum, digit) => sum + (digit === '1' ? 110 : 175), 0);
+      fitFootballText(number, 440, face === 'front' ? 550 : 365, face === 'front' ? 100 : 300, face === 'front' ? width / 3 : width, true);
+    }
+  }
+}
+
+function renderFootballPrint() {
+  const volleyball = AppState.category === 'VOLLEYBALL';
+  const football = AppState.category === 'FOOTBALL' || volleyball;
+  const keeper = AppState.footballModel === 'goalkeeper';
+  const name = formatScreenName(AppState.screenName) || (volleyball ? 'NAME' : 'YOUR NAME');
+  const number = String(AppState.screenNumber || '10');
+  const ns = 'http://www.w3.org/2000/svg';
+  for (const side of ['back', 'front', 'both']) {
+    const host = JERSEY_VIEWS[side].element;
+    let svg = host.querySelector('.football-print');
+    if (!svg) {
+      svg = document.createElementNS(ns, 'svg');
+      svg.classList.add('football-print');
+      svg.setAttribute('viewBox', '0 0 880 1120');
+      svg.setAttribute('aria-hidden', 'true');
+      for (const key of ['name', 'number']) {
+        const text = document.createElementNS(ns, 'text');
+        text.classList.add(`football-print-${key}`);
+        text.setAttribute('x', '440');
+        text.setAttribute('text-anchor', 'middle');
+        svg.append(text);
+      }
+      host.append(svg);
+    }
+    svg.style.display = football ? 'block' : 'none';
+    const nameText = svg.querySelector('.football-print-name');
+    nameText.textContent = side === 'front' ? '' : name;
+    nameText.setAttribute('y', keeper ? '330' : '290');
+    nameText.setAttribute('font-size', String(Math.min(64, 560 / Math.max(name.length * .65, 1))));
+    const numberText = svg.querySelector('.football-print-number');
+    numberText.textContent = number;
+    numberText.setAttribute('x', side === 'front' ? '275' : '440');
+    numberText.setAttribute('y', side === 'front' ? '320' : keeper ? '720' : '685');
+    numberText.setAttribute('font-size', side === 'front' ? '120' : '430');
+    const digitWidth = [...number].reduce((sum, digit) => sum + (digit === '1' ? 120 : 170), 0);
+    if (football) {
+      fitFootballText(nameText, 440, volleyball ? 185 : keeper ? 285 : 240, 60, volleyball ? 490 : 560);
+      fitFootballText(numberText, side === 'front' ? 275 : 440,
+        side === 'front' ? 225 : volleyball ? 300 : keeper ? 385 : 345,
+        side === 'front' ? (volleyball ? 75 : 100) : (volleyball ? 365 : 385),
+        side === 'front' ? digitWidth * (volleyball ? 75 : 100) / 345 : digitWidth * (volleyball ? 1.25 : 1.1), true);
+    }
+    if (volleyball) svg.querySelectorAll('.football-number-crest').forEach(crest => crest.remove());
+    else renderFootballNumberCrests(svg, keeper);
+    if (side === 'both') {
+      let front = host.querySelector('.football-print-front');
+      if (!front) {
+        front = svg.cloneNode(true);
+        front.classList.add('football-print-front');
+        host.append(front);
+      }
+      front.style.display = football ? 'block' : 'none';
+      front.querySelector('.football-print-name').textContent = '';
+      const frontNumber = front.querySelector('.football-print-number');
+      frontNumber.textContent = number;
+      frontNumber.setAttribute('x', '275');
+      frontNumber.setAttribute('y', '320');
+      frontNumber.setAttribute('font-size', '120');
+      if (football) fitFootballText(frontNumber, 275, 225, volleyball ? 75 : 100, digitWidth * (volleyball ? 75 : 100) / 345, true);
+      if (volleyball) front.querySelectorAll('.football-number-crest').forEach(crest => crest.remove());
+      else renderFootballNumberCrests(front, keeper);
+    }
+  }
+}
+
 function updateLivePreview() {
   renderJerseyPrint();
   renderJerseyChanges();
@@ -1181,6 +1398,11 @@ async function decodeJerseyImage(src) {
 }
 
 function loadJerseyArtwork(side) {
+  if (AppState.category === 'BASKETBALL') return decodeJerseyImage(`./basketball-v2-${side}.png`);
+  if (AppState.category === 'VOLLEYBALL') return decodeJerseyImage(`./volleyball-${side}.png`);
+  if (AppState.category === 'FOOTBALL') {
+    return decodeJerseyImage(`./football-${AppState.footballModel || 'player'}-${side}-blank.png`);
+  }
   if (!jerseyArtworkRequests.has(side)) {
     const file = `./jersey_authong_${side}`;
     const assets = [decodeJerseyImage(file + '.webp').catch(() => decodeJerseyImage(file + '.png'))];
@@ -1197,10 +1419,13 @@ function loadJerseyArtwork(side) {
 }
 
 async function prepareJerseyArtwork(element, side) {
-  if (element.classList.contains('artwork-ready')) return true;
+  const artworkKey = `${AppState.category}:${AppState.footballModel || 'player'}:${side}`;
+  if (element.classList.contains('artwork-ready') && element.dataset.artworkKey === artworkKey) return true;
+  element.dataset.artworkKey = artworkKey;
   const sides = side === 'both' ? ['back', 'front'] : [side];
   try {
     const images = await Promise.all(sides.map(loadJerseyArtwork));
+    if (element.dataset.artworkKey !== artworkKey) return false;
     element.style.backgroundImage = images.map(image => `url("${image.src}")`).join(', ');
     element.classList.add('artwork-ready');
     return true;
@@ -1369,6 +1594,7 @@ function updateOrdersCountBadge() {
 }
 
 function switchToEditMode(record, slipCode) {
+  setFootballModel(record.footballModel || (String(record.productTitle || '').includes('ผู้รักษาประตู') ? 'goalkeeper' : 'player'));
   AppState.mode = 'edit';
   AppState.existingRecord = record;
   AppState.pendingOrderId = String(record.orderId || '');
@@ -1605,12 +1831,13 @@ async function handleFormSubmit() {
     originalStudentNumber: String(originalRecord?.studentNumber ?? ''),
     originalRoom: normalizeRoomValue(originalRecord?.room),
     productTitle: `${AppState.category || 'ORIGINAL'} · Authong Athletics 2026`,
+    footballModel: AppState.category === 'FOOTBALL' ? AppState.footballModel || 'player' : '',
     name,
     number: number,
     size: AppState.size,
     quantity,
-    unitPrice: JERSEY_PRICE,
-    price: JERSEY_PRICE,
+    unitPrice: getJerseyPrice(),
+    price: getJerseyPrice(),
     timestamp: nowStr,
     status: shouldSendSlip ? 'รอตรวจสอบสลิป' : AppState.orderStatus,
     slipImage: shouldSendSlip ? AppState.slipImage : null,

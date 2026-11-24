@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=Kanit:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Press+Start+2P&family=SF+Pro+Display:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Montagu+Slab:wght@700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Graduate&display=swap');
 
 /* ========================================================
    CUSTOM SPORTS FONT (Inter Miami 23-24)
@@ -8,6 +10,22 @@
   font-family: 'JerseyMiami';
   src: url('./Inter Miami 23-24 Tipografstore.ttf') format('truetype');
   font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Football Varsity';
+  src: url('./fonts/Varsity-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Football Spain 2026';
+  src: url('./fonts/Spain Away WC 2026_Nero Design.otf') format('opentype');
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -1369,6 +1387,8 @@ body.storefront-order-view { --keyboard-inset: 0px; }
 /* Keep the customer capsule above the nav and let non-ORIGINAL cards read as unavailable. */
 .customer-context-row { z-index: 6; pointer-events: none; }
 .header-customer-chip { z-index: 1000; top: -11px; pointer-events: auto; }
+.header-customer-chip,
+.header-customer-chip.is-student-chip { font-family: 'Sarabun', Tahoma, sans-serif; font-weight: 600; line-height: 1.3; letter-spacing: .2px; }
 .header-cart-button:hover { background: transparent; }
 .collection-card:disabled {
   cursor: not-allowed;
@@ -1482,6 +1502,124 @@ body.storefront-order-view { --keyboard-inset: 0px; }
   color: #f4d5fa;
   font-size: 10px;
   line-height: 1.35;
+}
+
+.football-preview-dialog { width: min(900px, calc(100% - 24px)); max-height: 90dvh; padding: 20px; border: 0; border-radius: 24px; background: #fbf0fd; color: #6e4c78; overflow: auto; }
+.football-preview-dialog::backdrop { background: rgb(30 15 40 / 55%); }
+.football-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 900; }
+.football-preview-heading button { width: 44px; height: 44px; font-size: 30px; }
+.football-model-options { display: flex; gap: 8px; margin: 12px 0; }
+.football-model-options button { flex: 1; min-height: 44px; border: 2px solid #6e4c78; border-radius: 999px; font-weight: 800; }
+.football-model-options button[aria-pressed="true"] { background: #6e4c78; color: white; }
+.football-preview-images { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.football-preview-images figure { min-width: 0; text-align: center; font-weight: 700; }
+.football-preview-images img { width: 100%; aspect-ratio: 900 / 1160; object-fit: contain; }
+.football-model-field { margin-bottom: 20px; }
+.football-model-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
+.football-model-card { position: relative; min-width: 0; overflow: hidden; padding: 12px 10px; border: 2px solid #eee4f1; border-radius: 18px; background: #fcf9fd; color: #55415f; text-align: center; transition: border-color .18s, background .18s, box-shadow .18s; }
+.football-model-card[aria-pressed="true"] { border-color: #6e4c78; background: #f5e9f8; box-shadow: 0 4px 12px rgb(110 76 120 / 12%); }
+.football-model-card:focus-visible { outline: 3px solid #b58bc5; outline-offset: 3px; }
+.football-model-image { display: flex; align-items: center; justify-content: center; height: 108px; margin-bottom: 10px; }
+.football-model-image img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 4px rgb(40 20 50 / 15%)); }
+.football-model-copy { display: grid; gap: 4px; }
+.football-model-copy strong { font-size: 13px; font-weight: 800; }
+.football-model-copy small { display: flex; align-items: center; justify-content: center; gap: 5px; color: #88758f; font-size: 11px; }
+.football-model-copy i { width: 8px; height: 8px; border-radius: 50%; }
+.football-color-purple { background: #6223a1; }
+.football-color-orange { background: #ec651a; }
+.football-model-check { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 21px; height: 21px; border: 1px solid #ddcfe3; border-radius: 50%; color: transparent; background: white; font-size: 12px; }
+.football-model-card[aria-pressed="true"] .football-model-check { color: white; border-color: #6e4c78; background: #6e4c78; }
+.jersey-card-wrapper.is-football .jersey-svg-overlay { display: none; }
+.jersey-card-wrapper.is-volleyball .jersey-svg-overlay { display: none; }
+.jersey-card-wrapper.is-basketball .jersey-svg-overlay,
+.jersey-card-wrapper.is-basketball .football-print { display: none !important; }
+.basketball-print { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.jersey-hd-both .basketball-print { width: auto; height: 100%; aspect-ratio: 880 / 1120; right: auto; }
+.jersey-hd-both .basketball-print-front { left: auto; right: 0; }
+.basketball-print-name { font-family: Arial, 'Kanit', sans-serif; font-weight: 700; fill: white; stroke: #080609; stroke-width: 10px; stroke-linejoin: round; paint-order: stroke fill; }
+.basketball-print-number { font-family: 'Graduate', serif; font-weight: 400; fill: white; stroke: #080609; stroke-width: 18px; stroke-linejoin: miter; paint-order: stroke fill; }
+.basketball-guide-image { display: none; width: 100%; height: auto; border-radius: 14px; }
+.is-basketball-guide .basketball-guide-image { display: block; }
+.is-basketball-guide .basketball-guide-image + .grid,
+.is-basketball-guide #sizeGuideHeader p { display: none; }
+.collection-basketball .collection-art { width: 49%; height: 175px; }
+.basketball-card-shirt { position: absolute; top: 0; width: 60%; max-width: 130px; aspect-ratio: 550 / 818; container-type: inline-size; }
+.basketball-card-front { right: 35%; transform: rotate(-7deg); }
+.basketball-card-back { right: 0; transform: rotate(8deg); }
+.collection-basketball .basketball-card-shirt img { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: none; }
+.basketball-card-shirt strong, .basketball-card-shirt b { position: absolute; color: white; text-align: center; line-height: 1; }
+.basketball-card-shirt b { font-family: 'Graduate', serif; font-weight: 400; -webkit-text-stroke: 1px #f5ae22; paint-order: stroke fill; }
+.basketball-card-front b { top: 49%; left: 35%; width: 30%; font-size: 22cqw; }
+.basketball-card-back strong { top: 17%; left: 19%; width: 62%; font: 700 11cqw Arial, sans-serif; }
+.basketball-card-back b { top: 30%; left: 23%; width: 54%; font-size: 48cqw; }
+.customer-order-shirt.is-basketball b { font-family: 'Graduate', serif; color: white; -webkit-text-stroke: 1px #080609; paint-order: stroke fill; }
+@font-face {
+  font-family: 'Volleyball Breve';
+  src: local('Breve News Black'), local('BreveNews-Black'), local('BreveNewsBlack');
+  font-weight: 900;
+  font-style: normal;
+}
+.jersey-card-wrapper.is-volleyball .football-print-name { font-family: 'Volleyball Breve', 'Rockwell Bold', 'Montagu Slab', serif; font-weight: 900; font-style: italic; }
+.jersey-card-wrapper.is-volleyball .football-print-number { font-family: 'Football Varsity', serif; font-weight: 400; }
+.volleyball-guide-image { display: none; width: 100%; height: auto; border-radius: 14px; }
+#volleyballSizeNote { text-align: center; }
+.is-volleyball-guide .volleyball-guide-image { display: block; }
+.is-volleyball-guide .volleyball-guide-image + .grid,
+.is-volleyball-guide .basketball-guide-image + .grid,
+.is-volleyball-guide #sizeGuideHeader p { display: none; }
+.collection-volleyball .collection-art img:last-child { display: block; }
+.collection-volleyball .collection-art { width: 49%; height: 175px; }
+.volleyball-card-shirt { position: absolute; top: 0; width: 60%; max-width: 130px; height: auto; aspect-ratio: 500 / 620; container-type: inline-size; }
+.volleyball-card-front { right: 35%; aspect-ratio: 337 / 438; transform: rotate(-7deg); }
+.volleyball-card-back { right: 0; aspect-ratio: 344 / 449; transform: rotate(8deg); }
+.collection-volleyball .volleyball-card-shirt img { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: none; filter: drop-shadow(0 6px 7px rgb(28 17 31 / 20%)); }
+.volleyball-card-shirt b, .volleyball-card-shirt strong { position: absolute; color: #f7f5ff; text-align: center; line-height: 1; }
+.volleyball-card-shirt b { font-family: 'Football Varsity', serif; font-weight: 400; }
+.volleyball-card-front b { top: 21%; left: 27%; width: 14%; font-size: 12px; }
+.volleyball-card-back strong { top: 17%; left: 27%; width: 46%; font-family: 'Volleyball Breve', 'Rockwell Bold', serif; font-size: 12px; font-weight: 900; font-style: italic; }
+.volleyball-card-back b { top: 27%; left: 25%; width: 50%; font-size: 52px; }
+@media (max-width: 767px) {
+  .collection-volleyball .collection-art { height: 162px; }
+  .volleyball-card-back b { font-size: 45px; }
+  .volleyball-card-back strong { font-size: 10px; }
+  .volleyball-card-front b { font-size: 10px; }
+}
+.volleyball-card-front b { font-size: 10cqw; }
+.volleyball-card-back strong { font-size: 11cqw; }
+.volleyball-card-back b { font-size: 52cqw; }
+.order-studio-page .jersey-card-wrapper.is-volleyball:not(.is-docked) { max-width: 225px; }
+@media (max-width: 640px) {
+  .order-studio-page .jersey-card-wrapper.is-volleyball:not(.is-docked) { max-width: 189px; }
+}
+@media (min-width: 1024px) {
+  .order-studio-page .jersey-card-wrapper.is-volleyball:not(.is-docked) { max-width: 288px; }
+}
+.football-print { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.jersey-hd-both .football-print { width: auto; height: 100%; aspect-ratio: 880 / 1120; right: auto; }
+.jersey-hd-both .football-print-front { left: auto; right: 0; }
+.football-print-name { font-family: 'Football Spain 2026', 'Kanit', sans-serif; font-weight: 400; fill: #eee; }
+.football-print-number { font-family: 'Football Spain 2026', serif; font-weight: 400; font-style: normal; fill: #eee; stroke: none; }
+.customer-order-shirt.is-football > span, .customer-order-shirt.is-football > b { display: none; }
+.collection-price del { font-size: .65em; opacity: .7; margin-right: 5px; font-weight: 500; }
+.collection-price .sale-price { display: inline-flex; flex-direction: row; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+.collection-price .sale-price del { flex: 0 0 auto; margin: 0; }
+.collection-price .sale-price span { flex: 0 0 auto; }
+.collection-original .collection-art { width: 52%; height: 190px; top: -22px; }
+.collection-original .collection-art img { width: auto !important; max-width: none; height: 140px; }
+.collection-original .collection-art img:first-child { right: 32%; }
+.collection-original .collection-art img:last-child,
+.collection-football .collection-art img:last-child { display: block; }
+@media (max-width: 1023px) {
+  .collection-original .collection-art, .collection-football .collection-art { width: 49%; }
+  .collection-original .collection-art img, .collection-football .collection-art img { display: block; width: 65%; }
+  .collection-original .collection-art img:first-child, .collection-football .collection-art img:first-child { right: 35%; transform: rotate(-8deg); }
+  .collection-original .collection-art img:last-child, .collection-football .collection-art img:last-child { display: block; right: 0; transform: rotate(8deg); }
+  .collection-original .collection-art { width: 49%; height: 150px; top: -8px; }
+  .collection-original .collection-art img { width: auto !important; height: clamp(110px, 32vw, 140px); }
+  .collection-original .collection-art img:first-child { right: 32%; }
+  .collection-original .collection-copy { width: 51%; }
+  .collection-card:nth-child(even) .collection-copy { right: 12px; width: 46%; }
+  .collection-original .collection-copy strong, .collection-football .collection-copy strong { font-size: clamp(24px, 5.7vw, 36px); }
 }
 
 @media (min-width: 641px) {

@@ -39,7 +39,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="style.css?v=20261119-7">
+  <link rel="stylesheet" href="style.css?v=20261124-5">
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -162,23 +162,29 @@
       <div class="collection-grid">
         <button type="button" class="collection-card collection-original" data-product-category="ORIGINAL">
           <span class="collection-copy"><small>ORIGINAL</small><strong>Collection</strong></span>
-          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"></span>
+          <span class="collection-art" aria-hidden="true"><img src="./original-card-front.png" alt="" loading="eager"><img src="./original-card-back.png" alt="" loading="eager"></span>
           <span class="collection-price"><b>279 ฿</b><i data-collection-action>PREORDER</i></span>
         </button>
-        <button type="button" class="collection-card" data-product-category="FOOTBALL" disabled aria-disabled="true" title="เร็ว ๆ นี้">
+        <button type="button" class="collection-card collection-football" id="btnFootballPreview" data-product-category="FOOTBALL">
           <span class="collection-copy"><small>FOOTBALL</small><strong>Collection</strong></span>
-          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"><b class="collection-art-question">?</b></span>
-          <span class="collection-price"><b>2?? ฿</b><i data-collection-action>SOON</i></span>
+          <span class="collection-art" aria-hidden="true"><img src="./football-player-front.png" alt="" loading="lazy"><img src="./football-goalkeeper-front.png" alt="" loading="lazy"></span>
+          <span class="collection-price"><b class="sale-price"><del>279</del><span>269 ฿</span></b><i>PREORDER</i></span>
         </button>
-        <button type="button" class="collection-card" data-product-category="BASKETBALL" disabled aria-disabled="true" title="เร็ว ๆ นี้">
+        <button type="button" class="collection-card collection-volleyball" data-product-category="VOLLEYBALL">
+          <span class="collection-copy"><small>VOLLEYBALL</small><strong>Collection</strong></span>
+          <span class="collection-art" aria-hidden="true">
+            <span class="volleyball-card-shirt volleyball-card-front"><img src="./volleyball-card-front.png" alt="" loading="lazy"></span>
+            <span class="volleyball-card-shirt volleyball-card-back"><img src="./volleyball-card-back.png" alt="" loading="lazy"></span>
+          </span>
+          <span class="collection-price"><b>279 ฿</b><i>PREORDER</i></span>
+        </button>
+        <button type="button" class="collection-card collection-basketball" data-product-category="BASKETBALL">
           <span class="collection-copy"><small>BASKETBALL</small><strong>Collection</strong></span>
-          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"><b class="collection-art-question">?</b></span>
-          <span class="collection-price"><b>2?? ฿</b><i data-collection-action>SOON</i></span>
-        </button>
-        <button type="button" class="collection-card" data-product-category="AUHISTORY" disabled aria-disabled="true" title="เร็ว ๆ นี้">
-          <span class="collection-copy"><small>AUHISTORY</small><strong>Collection</strong></span>
-          <span class="collection-art" aria-hidden="true"><img src="./web-shirt-pair.png" alt="" loading="eager"><img src="./web-shirt-pair.png" alt="" loading="eager"><b class="collection-art-question">?</b></span>
-          <span class="collection-price"><b>2?? ฿</b><i data-collection-action>SOON</i></span>
+          <span class="collection-art" aria-hidden="true">
+            <span class="basketball-card-shirt basketball-card-front"><img src="./basketball-card-original-front.png?v=20261124-3" alt="" loading="lazy"></span>
+            <span class="basketball-card-shirt basketball-card-back"><img src="./basketball-card-original-back.png?v=20261124-3" alt="" loading="lazy"></span>
+          </span>
+          <span class="collection-price"><b>279 ฿</b><i data-collection-action>PREORDER</i></span>
         </button>
       </div>
     </section>
@@ -328,6 +334,7 @@
               </h1>
             </div>
             <div class="text-right">
+              <del id="collectionOriginalPrice" class="hidden mr-2 text-sm text-slate-400 font-mono">฿279</del>
               <span data-jersey-price class="text-2xl font-black text-purple-700 font-mono tracking-tight"></span>
             </div>
           </div>
@@ -380,6 +387,21 @@
 
           <!-- 2. Form Content (Shown after student lookup) -->
           <div id="formContentSection" class="space-y-4 hidden">
+          <div id="footballModelField" class="football-model-field hidden">
+            <span id="footballModelLabel" class="text-xs font-semibold text-slate-700">แบบเสื้อฟุตบอล</span>
+            <div class="football-model-cards" role="group" aria-labelledby="footballModelLabel">
+              <button type="button" class="football-model-card" data-order-football-model="player" aria-pressed="true">
+                <span class="football-model-check" aria-hidden="true">✓</span>
+                <span class="football-model-image"><img src="./football-player-front.png" alt="เสื้อนักฟุตบอลสีม่วง" loading="lazy"></span>
+                <span class="football-model-copy"><strong>นักฟุตบอล</strong></span>
+              </button>
+              <button type="button" class="football-model-card" data-order-football-model="goalkeeper" aria-pressed="false">
+                <span class="football-model-check" aria-hidden="true">✓</span>
+                <span class="football-model-image"><img src="./football-goalkeeper-front.png" alt="เสื้อผู้รักษาประตูสีส้ม" loading="lazy"></span>
+                <span class="football-model-copy"><strong>ผู้รักษาประตู</strong></span>
+              </button>
+            </div>
+          </div>
 
           <!-- 2.1 Personalization: Screen Name & Number -->
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -422,7 +444,7 @@
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <label class="text-xs font-semibold text-slate-700">
-                ขนาดเสื้อ (Singha Design Size)
+                <span id="collectionSizeLabel">ขนาดเสื้อ (Singha Design Size)</span>
               </label>
               <button type="button" id="btnOpenSizeGuideLink"
                 class="text-[11px] text-purple-600 hover:text-purple-800 font-semibold cursor-pointer">
@@ -449,7 +471,9 @@
                 (50")</button>
               <button type="button" data-size="5XL" class="size-btn apple-size-btn py-2 text-center text-xs">5XL
                 (52")</button>
+              <button type="button" data-size="6XL" class="size-btn apple-size-btn py-2 text-center text-xs hidden">6XL (52") +฿10</button>
             </div>
+            <p id="volleyballSizeNote" class="hidden text-xs text-purple-700">VOLLEYBALL · 4XL +10 บาท · 5XL +20 บาท · 6XL +30 บาท</p>
           </div>
 
           <section id="jerseyChanges" class="jersey-changes hidden" aria-labelledby="jerseyChangesTitle">
@@ -640,6 +664,8 @@
           class="text-slate-400 hover:text-slate-700 text-2xl cursor-pointer shrink-0">&times;</button>
       </div>
 
+      <img class="volleyball-guide-image" src="./volleyball-size-chart-v2.jpg" alt="ตารางไซส์ VOLLEYBALL: SS 34 นิ้ว ถึง 6XL 52 นิ้ว โดย 4XL เพิ่ม 10 บาท 5XL เพิ่ม 20 บาท และ 6XL เพิ่ม 30 บาท">
+      <img class="basketball-guide-image" src="./basketball-size-guide.jpg?v=20261124-3" alt="ตารางไซส์ TRC BASKETBALL: XS–5XL รอบอก 34–50 นิ้ว ความยาว 25–33 นิ้ว">
       <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
         <div
           class="md:col-span-5 flex flex-col items-center justify-center p-3 bg-purple-50/50 rounded-2xl border border-purple-100">
@@ -896,9 +922,18 @@
     }
   </script>
 
+  <dialog id="footballPreview" class="football-preview-dialog">
+    <div class="football-preview-heading"><h2>FOOTBALL Collection</h2><button type="button" id="closeFootballPreview" aria-label="ปิด">×</button></div>
+    <div class="football-model-options" role="group" aria-label="แบบเสื้อ">
+      <button type="button" data-football-model="player" aria-pressed="true">นักฟุตบอล</button>
+      <button type="button" data-football-model="goalkeeper" aria-pressed="false">ผู้รักษาประตู</button>
+    </div>
+    <div class="football-preview-images"><figure><img id="footballFront" src="./football-player-front.png" alt="เสื้อนักฟุตบอลด้านหน้า"><figcaption>ด้านหน้า</figcaption></figure><figure><img id="footballBack" src="./football-player-back.png" alt="เสื้อนักฟุตบอลด้านหลัง"><figcaption>ด้านหลัง</figcaption></figure></div>
+  </dialog>
+  <script src="football-preview.js?v=20261120-3"></script>
   <!-- Main JS -->
-  <script src="app.js?v=20261119-8"></script>
-  <script src="storefront.js?v=20261119-7"></script>
+  <script src="app.js?v=20261124-4"></script>
+  <script src="storefront.js?v=20261124-3"></script>
 </body>
 
 </html>

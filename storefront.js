@@ -1,6 +1,7 @@
 const ORDER_CATEGORY_LABELS = {
   ORIGINAL: 'ORIGINAL',
   FOOTBALL: 'FOOTBALL',
+  VOLLEYBALL: 'VOLLEYBALL',
   BASKETBALL: 'BASKETBALL',
   AUHISTORY: 'AUHISTORY'
 };
@@ -258,6 +259,16 @@ document.addEventListener('DOMContentLoaded', () => {
       shirt.className = 'customer-order-shirt';
       const image = document.createElement('img');
       image.src = './jersey_authong_back.webp';
+      if (order.category === 'VOLLEYBALL') image.src = './volleyball-back.png';
+      if (order.category === 'BASKETBALL') {
+        image.src = './basketball-v2-back.png';
+        shirt.classList.add('is-basketball');
+      }
+      if (order.category === 'FOOTBALL') {
+        const keeper = String(order.productTitle || '').includes('ผู้รักษาประตู');
+        image.src = `./football-${keeper ? 'goalkeeper' : 'player'}-back.png`;
+        shirt.classList.add('is-football');
+      }
       image.alt = '';
       image.loading = 'lazy';
       const shirtName = document.createElement('span');
@@ -270,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
       content.className = 'customer-order-content';
       const title = document.createElement('h3');
       title.textContent = ORDER_CATEGORY_LABELS[order.category] || order.category || 'ORDER';
+      if (order.category === 'FOOTBALL') title.textContent += String(order.productTitle || '').includes('ผู้รักษาประตู') ? ' · ผู้รักษาประตู' : ' · นักฟุตบอล';
       const detail = document.createElement('div');
       detail.className = 'customer-order-details';
       [["NAME", order.name || '—'], ["NUMBER", order.number || '—'], ["Size", order.size || '—']].forEach(([label, value]) => {
@@ -292,8 +304,8 @@ document.addEventListener('DOMContentLoaded', () => {
       edit.type = 'button';
       edit.className = 'customer-order-edit';
       edit.textContent = 'แก้ไขข้อมูล';
-      edit.disabled = order.category !== 'ORIGINAL';
-      if (order.category !== 'ORIGINAL') edit.title = 'คอลเลกชันนี้ยังไม่เปิดให้แก้ไขบนเว็บไซต์';
+      edit.disabled = !['ORIGINAL', 'FOOTBALL', 'VOLLEYBALL', 'BASKETBALL'].includes(order.category);
+      if (edit.disabled) edit.title = 'คอลเลกชันนี้ยังไม่เปิดให้แก้ไขบนเว็บไซต์';
       else if (/ผ่าน|ชำระเงินแล้ว|ชำระเงินสำเร็จ|ตรวจสอบแล้ว|กำลังผลิต|พร้อมรับ|จัดส่งแล้ว|เสร็จสิ้น/.test(paymentStatus)) {
         edit.title = 'แก้ไขข้อมูลเสื้อได้ แต่ไม่สามารถเปลี่ยนสลิปที่ผ่านแล้ว';
       }
@@ -845,6 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       AppState.category = category;
+      setFootballModel('player');
       AppState.pendingOrderId = '';
       AppState.quantity = 1;
       persistCustomerSession('home');
