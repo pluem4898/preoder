@@ -1544,7 +1544,7 @@ body.storefront-order-view { --keyboard-inset: 0px; }
 .is-basketball-guide .basketball-guide-image { display: block; }
 .is-basketball-guide .basketball-guide-image + .grid,
 .is-basketball-guide #sizeGuideHeader p { display: none; }
-.collection-basketball .collection-art { width: 49%; height: 175px; }
+.collection-basketball .collection-art { width: 49%; height: 175px; transform: translateX(-16px); }
 .basketball-card-shirt { position: absolute; top: 0; width: 50%; max-width: 108px; aspect-ratio: 550 / 818; container-type: inline-size; }
 .basketball-card-front { right: 35%; transform: rotate(-7deg); }
 .basketball-card-back { right: 0; transform: rotate(8deg); }
