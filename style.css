@@ -1536,14 +1536,16 @@ body.storefront-order-view { --keyboard-inset: 0px; }
 .basketball-print { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .jersey-hd-both .basketball-print { width: auto; height: 100%; aspect-ratio: 880 / 1120; right: auto; }
 .jersey-hd-both .basketball-print-front { left: auto; right: 0; }
-.basketball-print-name { font-family: Arial, 'Kanit', sans-serif; font-weight: 700; fill: white; stroke: #080609; stroke-width: 10px; stroke-linejoin: round; paint-order: stroke fill; }
-.basketball-print-number { font-family: 'Graduate', serif; font-weight: 400; fill: white; stroke: #080609; stroke-width: 18px; stroke-linejoin: miter; paint-order: stroke fill; }
+.basketball-print-name { font-family: Arial, 'Kanit', sans-serif; font-weight: 900; fill: white; stroke: #080609; stroke-width: 10px; stroke-linejoin: round; paint-order: stroke fill; }
+.basketball-print-number, .basketball-number-outline { font-family: 'Graduate', serif; font-weight: 900; fill: white; stroke-linejoin: miter; paint-order: stroke fill; }
+.basketball-print-number { stroke: white; stroke-width: 8px; }
+.basketball-number-outline { stroke: #080609; stroke-width: 26px; }
 .basketball-guide-image { display: none; width: 100%; height: auto; border-radius: 14px; }
 .is-basketball-guide .basketball-guide-image { display: block; }
 .is-basketball-guide .basketball-guide-image + .grid,
 .is-basketball-guide #sizeGuideHeader p { display: none; }
 .collection-basketball .collection-art { width: 49%; height: 175px; }
-.basketball-card-shirt { position: absolute; top: 0; width: 60%; max-width: 130px; aspect-ratio: 550 / 818; container-type: inline-size; }
+.basketball-card-shirt { position: absolute; top: 0; width: 53%; max-width: 115px; aspect-ratio: 550 / 818; container-type: inline-size; }
 .basketball-card-front { right: 35%; transform: rotate(-7deg); }
 .basketball-card-back { right: 0; transform: rotate(8deg); }
 .collection-basketball .basketball-card-shirt img { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: none; }
@@ -1626,4 +1628,12 @@ body.storefront-order-view { --keyboard-inset: 0px; }
   #siteHeader:not(.hidden) + main {
     padding-top: 100px !important;
   }
+}
+
+.order-studio-page .jersey-card-wrapper.is-basketball:not(.is-docked) { max-width: 220px; }
+@media (max-width: 640px) {
+  .order-studio-page .jersey-card-wrapper.is-basketball:not(.is-docked) { max-width: 185px; }
+}
+@media (min-width: 1024px) {
+  .order-studio-page .jersey-card-wrapper.is-basketball:not(.is-docked) { max-width: 282px; }
 }

@@ -1308,6 +1308,10 @@ function renderBasketballPrint() {
       number.textContent = String(AppState.screenNumber || '56');
       const width = [...number.textContent].reduce((sum, digit) => sum + (digit === '1' ? 110 : 175), 0);
       fitFootballText(number, 440, face === 'front' ? 550 : 365, face === 'front' ? 100 : 300, face === 'front' ? width / 3 : width, true);
+      svg.querySelector('.basketball-number-outline')?.remove();
+      const outline = number.cloneNode(true);
+      outline.setAttribute('class', 'basketball-number-outline');
+      number.before(outline);
     }
   }
 }
