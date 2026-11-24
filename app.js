@@ -1264,13 +1264,13 @@ function renderFootballNumberCrests(svg, keeper) {
   }
 }
 
-function renderBasketballPrint() {
-  const active = AppState.category === 'BASKETBALL';
+function renderBasketballPrint(state = AppState, views = JERSEY_VIEWS) {
+  const active = state.category === 'BASKETBALL';
   const ns = 'http://www.w3.org/2000/svg';
-  for (const side of ['back', 'front', 'both']) {
-    const host = JERSEY_VIEWS[side].element;
-    const views = side === 'both' ? ['back', 'front'] : [side];
-    for (const face of views) {
+  for (const side of Object.keys(views)) {
+    const host = views[side].element;
+    const faces = side === 'both' ? ['back', 'front'] : [side];
+    for (const face of faces) {
       let svg = host.querySelector(`.basketball-print-${face}`);
       if (!svg) {
         svg = document.createElementNS(ns, 'svg');
@@ -1278,7 +1278,7 @@ function renderBasketballPrint() {
         svg.setAttribute('viewBox', '0 0 880 1120');
         svg.setAttribute('aria-hidden', 'true');
         const path = document.createElementNS(ns, 'path');
-        path.id = `basketball-name-arc-${side}-${face}`;
+        path.id = `basketball-name-arc-${host.dataset.printId || 'studio'}-${side}-${face}`;
         path.setAttribute('d', 'M 205 365 Q 440 235 675 365');
         path.setAttribute('fill', 'none');
         const defs = document.createElementNS(ns, 'defs');
@@ -1301,11 +1301,11 @@ function renderBasketballPrint() {
       }
       svg.style.display = active ? 'block' : 'none';
       if (!active) continue;
-      const name = formatScreenName(AppState.screenName) || 'PLAYER';
+      const name = formatScreenName(state.screenName) || 'PLAYER';
       svg.querySelector('textPath').textContent = face === 'back' ? name : '';
       svg.querySelector('.basketball-print-name').setAttribute('font-size', String(Math.min(72, 510 / Math.max(name.length * .65, 1))));
       const number = svg.querySelector('.basketball-print-number');
-      number.textContent = String(AppState.screenNumber || '56');
+      number.textContent = String(state.screenNumber || '56');
       const width = [...number.textContent].reduce((sum, digit) => sum + (digit === '1' ? 110 : 175), 0);
       fitFootballText(number, 440, face === 'front' ? 550 : 365, face === 'front' ? 100 : 300, face === 'front' ? width * .92 / 3 : width * .92, true);
       svg.querySelector('.basketball-number-outline')?.remove();
@@ -1316,15 +1316,15 @@ function renderBasketballPrint() {
   }
 }
 
-function renderFootballPrint() {
-  const volleyball = AppState.category === 'VOLLEYBALL';
-  const football = AppState.category === 'FOOTBALL' || volleyball;
-  const keeper = AppState.footballModel === 'goalkeeper';
-  const name = formatScreenName(AppState.screenName) || (volleyball ? 'NAME' : 'YOUR NAME');
-  const number = String(AppState.screenNumber || '10');
+function renderFootballPrint(state = AppState, views = JERSEY_VIEWS) {
+  const volleyball = state.category === 'VOLLEYBALL';
+  const football = state.category === 'FOOTBALL' || volleyball;
+  const keeper = state.footballModel === 'goalkeeper';
+  const name = formatScreenName(state.screenName) || (volleyball ? 'NAME' : 'YOUR NAME');
+  const number = String(state.screenNumber || '10');
   const ns = 'http://www.w3.org/2000/svg';
-  for (const side of ['back', 'front', 'both']) {
-    const host = JERSEY_VIEWS[side].element;
+  for (const side of Object.keys(views)) {
+    const host = views[side].element;
     let svg = host.querySelector('.football-print');
     if (!svg) {
       svg = document.createElementNS(ns, 'svg');

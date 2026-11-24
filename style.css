@@ -1213,6 +1213,9 @@ body.storefront-order-view { --keyboard-inset: 0px; }
 .customer-order-card { display: grid; grid-template-columns: minmax(112px, 36%) minmax(0,1fr); align-items: center; gap: 12px; padding: 0 0 16px; border-bottom: 5px solid #6e4c78; }
 .customer-order-shirt { position: relative; display: grid; min-height: 170px; place-items: center; overflow: hidden; }
 .customer-order-shirt img { width: 100%; height: 170px; object-fit: contain; }
+.customer-order-artwork { position: relative; height: 170px; aspect-ratio: 880 / 1120; max-width: 100%; background: center / contain no-repeat; }
+.customer-order-shirt.is-volleyball .football-print-name { font-family: 'Volleyball Breve', 'Rockwell Bold', 'Montagu Slab', serif; font-weight: 900; font-style: italic; }
+.customer-order-shirt.is-volleyball .football-print-number { font-family: 'Football Varsity', serif; font-weight: 400; }
 .customer-order-shirt span, .customer-order-shirt b { position: absolute; left: 50%; color: #fff; font-family: 'Rockwell Bold','Rockwell',serif; font-weight: 900; text-align: center; transform: translateX(-50%); }
 .customer-order-shirt span { top: 34%; max-width: 90%; overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .customer-order-shirt b { top: 43%; font-family: 'DOSIyagiBoldface',monospace; font-size: 30px; line-height: 1; }
@@ -1274,6 +1277,7 @@ body.storefront-order-view { --keyboard-inset: 0px; }
   .who-screen { margin-top: clamp(100px,17vh,150px); }
   .customer-order-card { grid-template-columns: 37% minmax(0,1fr); gap: 8px; }
   .customer-order-shirt, .customer-order-shirt img { min-height: 150px; height: 150px; }
+  .customer-order-artwork { height: 150px; }
   .customer-order-content { padding: 10px; }
   .customer-order-content h3 { font-size: 16px; }
   .customer-order-edit { padding: 6px 9px; font-size: 9px; }

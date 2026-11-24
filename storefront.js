@@ -252,21 +252,24 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    orders.forEach(order => {
+    orders.forEach((order, orderIndex) => {
       const card = document.createElement('article');
       card.className = 'customer-order-card';
       const shirt = document.createElement('div');
       shirt.className = 'customer-order-shirt';
       const image = document.createElement('img');
       image.src = './jersey_authong_back.webp';
-      if (order.category === 'VOLLEYBALL') image.src = './volleyball-back.png';
+      if (order.category === 'VOLLEYBALL') {
+        image.src = './volleyball-back.png';
+        shirt.classList.add('is-volleyball');
+      }
       if (order.category === 'BASKETBALL') {
         image.src = './basketball-v2-back.png';
         shirt.classList.add('is-basketball');
       }
       if (order.category === 'FOOTBALL') {
         const keeper = String(order.productTitle || '').includes('ผู้รักษาประตู');
-        image.src = `./football-${keeper ? 'goalkeeper' : 'player'}-back.png`;
+        image.src = `./football-${keeper ? 'goalkeeper' : 'player'}-back-blank.png`;
         shirt.classList.add('is-football');
       }
       image.alt = '';
@@ -275,7 +278,34 @@ document.addEventListener('DOMContentLoaded', () => {
       shirtName.textContent = String(order.name || 'NAME');
       const shirtNumber = document.createElement('b');
       shirtNumber.textContent = String(order.number || '08').padStart(2, '0');
-      shirt.append(image, shirtName, shirtNumber);
+      if (['FOOTBALL', 'VOLLEYBALL', 'BASKETBALL'].includes(order.category)) {
+        const artwork = document.createElement('div');
+        artwork.className = 'customer-order-artwork';
+        artwork.dataset.printId = 'order-' + orderIndex;
+        artwork.style.backgroundImage = 'url("' + image.src + '")';
+        artwork.setAttribute('role', 'img');
+        artwork.setAttribute('aria-label', order.category + ' ชื่อ ' + String(order.name || '') + ' เบอร์ ' + String(order.number ?? ''));
+        shirt.append(artwork);
+        const state = {
+          category: order.category,
+          screenName: order.name || '',
+          screenNumber: String(order.number ?? ''),
+          footballModel: String(order.productTitle || '').includes('ผู้รักษาประตู') ? 'goalkeeper' : 'player'
+        };
+        const render = () => {
+          if (!artwork.isConnected) return;
+          const views = { back: { element: artwork } };
+          if (order.category === 'BASKETBALL') renderBasketballPrint(state, views);
+          else renderFootballPrint(state, views);
+        };
+        requestAnimationFrame(() => {
+          render();
+          document.fonts.ready.then(render);
+        });
+      } else {
+        shirtNumber.textContent = String(order.number || '08');
+        shirt.append(image, shirtName, shirtNumber);
+      }
 
       const content = document.createElement('div');
       content.className = 'customer-order-content';
